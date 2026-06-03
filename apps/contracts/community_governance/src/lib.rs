@@ -24,6 +24,10 @@
 #![no_std]
 #![allow(deprecated)]
 
+use soroban_sdk::{
+    contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, Map, String,
+};
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -1071,7 +1075,7 @@ mod tests {
 
     #[test]
     fn test_finalize_expired_proposal() {
-        let (env, client) = setup();
+        let (env, _admin, client) = setup();
         let proposer = Address::generate(&env);
         let id = client.propose(&proposer, &String::from_str(&env, "Test"), &String::from_str(&env, "Desc"));
         env.ledger().with_mut(|l| l.sequence_number += 101);

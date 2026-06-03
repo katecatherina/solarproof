@@ -135,6 +135,7 @@ impl EnergyToken {
     /// * `from`    — token owner (must authorise).
     /// * `spender` — address being granted the allowance.
     /// * `amount`  — maximum tokens `spender` may spend (must be ≥ 0).
+    /// * `_expiration_ledger` — ledger number when the allowance expires.
     ///
     /// # Authorization
     /// Requires `from` authorisation.
@@ -144,7 +145,7 @@ impl EnergyToken {
     ///
     /// # Events
     /// Emits `(topic: "approve", data: (from, spender, amount))`.
-    pub fn approve(env: Env, from: Address, spender: Address, amount: i128) {
+    pub fn approve(env: Env, from: Address, spender: Address, amount: i128, _expiration_ledger: u32) {
         from.require_auth();
         assert!(amount >= 0, "amount must be non-negative");
         env.storage()
@@ -338,21 +339,22 @@ impl EnergyToken {
             .expect("not initialized")
     }
 
-    /// Retire all tokens held by `account`, permanently marking the address as retired.
+    /// Retire `amount` tokens held by `account`, permanently marking the address as retired if full balance is retired.
     ///
-    /// Burns the full balance and sets a `Retired` flag that blocks future transfers.
+    /// Burns the specified amount.
     ///
     /// # Arguments
     /// * `account` — address retiring their tokens (must authorise).
+    /// * `amount`  — number of tokens to retire.
     /// * `reason`  — human-readable retirement reason (e.g. `"REC compliance"`).
     ///
     /// # Panics
     /// * `"already retired"` if `account` is already retired.
-    /// * `"no balance to retire"` if `account` holds zero tokens.
+    /// * `"insufficient balance"` if `account` holds fewer tokens than `amount`.
     ///
     /// # Events
     /// Emits `(topic: "retire", data: (account, amount, reason))`.
-    pub fn retire(env: Env, account: Address, reason: String) {
+    pub fn retire(env: Env, account: Address, amount: i128, reason: String) {
         account.require_auth();
         assert!(
             !env.storage()
@@ -363,14 +365,20 @@ impl EnergyToken {
         );
         let key = (symbol_short!("balance"), account.clone());
         let bal: i128 = env.storage().persistent().get(&key).unwrap_or(0);
-        assert!(bal > 0, "no balance to retire");
-        env.storage().persistent().set(&key, &0_i128);
-        env.storage()
-            .persistent()
-            .set(&DataKey::Retired(account.clone()), &true);
-        Self::add_burned(&env, bal);
+        assert!(bal >= amount, "insufficient balance");
+        assert!(amount > 0, "amount must be positive");
+
+        env.storage().persistent().set(&key, &(bal - amount));
+
+        if bal == amount {
+            env.storage()
+                .persistent()
+                .set(&DataKey::Retired(account.clone()), &true);
+        }
+
+        Self::add_burned(&env, amount);
         env.events()
-            .publish((symbol_short!("retire"),), (account, bal, reason));
+            .publish((symbol_short!("retire"),), (account, amount, reason));
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
@@ -394,6 +402,9 @@ impl EnergyToken {
     }
 
     fn move_balance(env: &Env, from: &Address, to: &Address, amount: i128) {
+        if from == to {
+            return;
+        }
         let fk = (symbol_short!("balance"), from.clone());
         let fb: i128 = env.storage().persistent().get(&fk).expect("no balance");
         assert!(fb >= amount, "insufficient balance");
@@ -442,7 +453,7 @@ impl EnergyToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env};
+    use soroban_sdk::{testutils::Address as _, Env, IntoVal};
 
     fn setup() -> (Env, EnergyTokenClient<'static>) {
         let env = Env::default();
@@ -548,7 +559,7 @@ mod tests {
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
         assert_eq!(client.allowance(&owner, &spender), 0);
-        client.approve(&owner, &spender, &500_i128);
+        client.approve(&owner, &spender, &500_i128, &1000_u32);
         assert_eq!(client.allowance(&owner, &spender), 500_i128);
     }
 
@@ -559,7 +570,7 @@ mod tests {
         let spender = Address::generate(&env);
         let recipient = Address::generate(&env);
         client.mint(&owner, &1000_i128);
-        client.approve(&owner, &spender, &400_i128);
+        client.approve(&owner, &spender, &400_i128, &1000_u32);
         client.transfer_from(&spender, &owner, &recipient, &300_i128);
         assert_eq!(client.balance(&owner), 700_i128);
         assert_eq!(client.balance(&recipient), 300_i128);
@@ -575,7 +586,7 @@ mod tests {
         let spender = Address::generate(&env);
         let recipient = Address::generate(&env);
         client.mint(&owner, &1000_i128);
-        client.approve(&owner, &spender, &100_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
         client.transfer_from(&spender, &owner, &recipient, &200_i128);
     }
 
@@ -585,7 +596,7 @@ mod tests {
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
         client.mint(&owner, &1000_i128);
-        client.approve(&owner, &spender, &600_i128);
+        client.approve(&owner, &spender, &600_i128, &1000_u32);
         client.burn_from(&spender, &owner, &400_i128);
         assert_eq!(client.balance(&owner), 600_i128);
         assert_eq!(client.total_supply(), 600_i128);
@@ -599,7 +610,7 @@ mod tests {
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
         client.mint(&owner, &1000_i128);
-        client.approve(&owner, &spender, &50_i128);
+        client.approve(&owner, &spender, &50_i128, &1000_u32);
         client.burn_from(&spender, &owner, &100_i128);
     }
 
@@ -608,8 +619,8 @@ mod tests {
         let (env, client) = setup();
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
-        client.approve(&owner, &spender, &500_i128);
-        client.approve(&owner, &spender, &100_i128);
+        client.approve(&owner, &spender, &500_i128, &1000_u32);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
         assert_eq!(client.allowance(&owner, &spender), 100_i128);
     }
 
@@ -618,8 +629,8 @@ mod tests {
         let (env, client) = setup();
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
-        client.approve(&owner, &spender, &500_i128);
-        client.approve(&owner, &spender, &0_i128);
+        client.approve(&owner, &spender, &500_i128, &1000_u32);
+        client.approve(&owner, &spender, &0_i128, &1000_u32);
         assert_eq!(client.allowance(&owner, &spender), 0);
     }
 
@@ -731,7 +742,7 @@ mod tests {
         let (env, client) = setup();
         let user = Address::generate(&env);
         client.mint(&user, &1000_i128);
-        client.retire(&user, &300_i128);
+        client.retire(&user, &300_i128, &String::from_str(&env, "retire"));
         assert_eq!(client.balance(&user), 700_i128);
         assert_eq!(client.total_supply(), 700_i128);
     }
@@ -742,7 +753,7 @@ mod tests {
         let (env, client) = setup();
         let user = Address::generate(&env);
         client.mint(&user, &100_i128);
-        client.retire(&user, &0_i128);
+        client.retire(&user, &0_i128, &String::from_str(&env, "retire"));
     }
 
     // approve
@@ -753,7 +764,7 @@ mod tests {
         let (env, client) = setup();
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
-        client.approve(&owner, &spender, &-1_i128);
+        client.approve(&owner, &spender, &-1_i128, &1000_u32);
     }
 
     // transfer_from
@@ -766,7 +777,7 @@ mod tests {
         let spender = Address::generate(&env);
         let recipient = Address::generate(&env);
         client.mint(&owner, &100_i128);
-        client.approve(&owner, &spender, &100_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
         client.transfer_from(&spender, &owner, &recipient, &0_i128);
     }
 
@@ -779,7 +790,7 @@ mod tests {
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
         client.mint(&owner, &100_i128);
-        client.approve(&owner, &spender, &100_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
         client.burn_from(&spender, &owner, &0_i128);
     }
 
@@ -915,7 +926,7 @@ mod tests {
         let (env, client) = setup();
         let user = Address::generate(&env);
         client.mint(&user, &1000_i128);
-        client.retire(&user, &String::from_str(&env, "REC compliance"));
+        client.retire(&user, &1000_i128, &String::from_str(&env, "REC compliance"));
         assert_eq!(client.balance(&user), 0);
         assert_eq!(client.total_supply(), 0);
     }
@@ -926,10 +937,10 @@ mod tests {
         let (env, client) = setup();
         let user = Address::generate(&env);
         client.mint(&user, &500_i128);
-        client.retire(&user, &String::from_str(&env, "first"));
+        client.retire(&user, &500_i128, &String::from_str(&env, "first"));
         // mint again so balance > 0, but retired flag is set
         client.mint(&user, &100_i128);
-        client.retire(&user, &String::from_str(&env, "second"));
+        client.retire(&user, &100_i128, &String::from_str(&env, "second"));
     }
 
     #[test]
@@ -939,18 +950,18 @@ mod tests {
         let user = Address::generate(&env);
         let recipient = Address::generate(&env);
         client.mint(&user, &1000_i128);
-        client.retire(&user, &String::from_str(&env, "REC compliance"));
+        client.retire(&user, &1000_i128, &String::from_str(&env, "REC compliance"));
         // mint again so balance > 0, but retired flag blocks transfer
         client.mint(&user, &100_i128);
         client.transfer(&user, &recipient, &100_i128);
     }
 
     #[test]
-    #[should_panic(expected = "no balance to retire")]
+    #[should_panic(expected = "amount must be positive")]
     fn test_retire_zero_balance_panics() {
         let (env, client) = setup();
         let user = Address::generate(&env);
-        client.retire(&user, &String::from_str(&env, "empty"));
+        client.retire(&user, &0_i128, &String::from_str(&env, "empty"));
     }
 
     // SEP-41 compliance tests
@@ -1002,8 +1013,8 @@ mod tests {
     #[test]
     fn test_sep41_name_symbol_decimals() {
         let (env, client) = setup();
-        assert_eq!(client.name(), String::from_str(&env, "SolarProof Energy Certificate"));
-        assert_eq!(client.symbol(), String::from_str(&env, "SPEC"));
+        assert_eq!(client.name(), String::from_str(&env, "SolarProof kWh"));
+        assert_eq!(client.symbol(), String::from_str(&env, "SKWH"));
         assert_eq!(client.decimals(), 7_u32);
     }
 
@@ -1024,7 +1035,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "balance overflow")]
+    #[should_panic(expected = "overflow: balance")]
     fn test_mint_overflow_rejected() {
         let (env, client) = setup();
         let user = Address::generate(&env);

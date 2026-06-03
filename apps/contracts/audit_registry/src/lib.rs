@@ -78,6 +78,7 @@ pub enum DataKey {
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u32)]
 pub enum Error {
     Unauthorized = 1,
     AlreadyAnchored = 2,
@@ -305,7 +306,7 @@ mod tests {
         let (env, api_signer, client) = setup();
         let h = hash(&env);
         let n = make_nonce(&env, 1);
-        client.anchor(&api_signer, &h, &n).unwrap();
+        client.anchor(&api_signer, &h, &n);
         assert!(client.is_anchored(&h));
         assert_eq!(client.total_anchors(), 1);
         let anchor = client.verify(&h).unwrap();
@@ -317,7 +318,7 @@ mod tests {
         let (env, api_signer, client) = setup();
         let h = hash(&env);
         let n = make_nonce(&env, 1);
-        client.anchor(&api_signer, &h, &n).unwrap();
+        client.anchor(&api_signer, &h, &n);
         let anchor = client.verify(&h).unwrap();
         let _ = anchor.anchored_at_ledger;
     }
@@ -328,8 +329,11 @@ mod tests {
         let h = hash(&env);
         let n1 = make_nonce(&env, 1);
         let n2 = make_nonce(&env, 2);
-        client.anchor(&api_signer, &h, &n1).unwrap();
-        assert_eq!(client.anchor(&api_signer, &h, &n2), Err(Error::AlreadyAnchored));
+        client.anchor(&api_signer, &h, &n1);
+        assert_eq!(
+            client.try_anchor(&api_signer, &h, &n2),
+            Err(Ok(Error::AlreadyAnchored))
+        );
     }
 
     #[test]
@@ -338,8 +342,11 @@ mod tests {
         let h1 = BytesN::from_array(&env, &[1u8; 32]);
         let h2 = BytesN::from_array(&env, &[2u8; 32]);
         let n = make_nonce(&env, 1);
-        client.anchor(&api_signer, &h1, &n).unwrap();
-        assert_eq!(client.anchor(&api_signer, &h2, &n), Err(Error::AlreadyAnchored));
+        client.anchor(&api_signer, &h1, &n);
+        assert_eq!(
+            client.try_anchor(&api_signer, &h2, &n),
+            Err(Ok(Error::AlreadyAnchored))
+        );
     }
 
     #[test]
@@ -348,8 +355,8 @@ mod tests {
         let h = hash(&env);
         let n1 = make_nonce(&env, 1);
         let n2 = make_nonce(&env, 2);
-        client.anchor(&api_signer, &h, &n1).unwrap();
-        let _ = client.anchor(&api_signer, &h, &n2);
+        client.anchor(&api_signer, &h, &n1);
+        let _ = client.try_anchor(&api_signer, &h, &n2);
         assert_eq!(client.total_anchors(), 1);
     }
 
@@ -358,8 +365,8 @@ mod tests {
         let (env, api_signer, client) = setup();
         let h1 = BytesN::from_array(&env, &[0xAAu8; 32]);
         let h2 = BytesN::from_array(&env, &[0xBBu8; 32]);
-        client.anchor(&api_signer, &h1, &make_nonce(&env, 1)).unwrap();
-        client.anchor(&api_signer, &h2, &make_nonce(&env, 2)).unwrap();
+        client.anchor(&api_signer, &h1, &make_nonce(&env, 1));
+        client.anchor(&api_signer, &h2, &make_nonce(&env, 2));
         assert!(client.is_anchored(&h1));
         assert!(client.is_anchored(&h2));
         assert_eq!(client.total_anchors(), 2);
@@ -370,8 +377,8 @@ mod tests {
         let (env, _api_signer, client) = setup();
         let attacker = soroban_sdk::Address::generate(&env);
         assert_eq!(
-            client.anchor(&attacker, &hash(&env), &make_nonce(&env, 1)),
-            Err(Error::Unauthorized)
+            client.try_anchor(&attacker, &hash(&env), &make_nonce(&env, 1)),
+            Err(Ok(Error::Unauthorized))
         );
     }
 
@@ -381,8 +388,8 @@ mod tests {
         let new_signer = soroban_sdk::Address::generate(&env);
         client.set_api_signer(&new_signer);
         assert_eq!(
-            client.anchor(&old_signer, &hash(&env), &make_nonce(&env, 1)),
-            Err(Error::Unauthorized)
+            client.try_anchor(&old_signer, &hash(&env), &make_nonce(&env, 1)),
+            Err(Ok(Error::Unauthorized))
         );
     }
 
@@ -407,8 +414,7 @@ mod tests {
         let (env, api_signer, client) = setup();
         for i in 0u8..5 {
             client
-                .anchor(&api_signer, &BytesN::from_array(&env, &[i; 32]), &make_nonce(&env, i))
-                .unwrap();
+                .anchor(&api_signer, &BytesN::from_array(&env, &[i; 32]), &make_nonce(&env, i));
         }
         assert_eq!(client.total_anchors(), 5);
     }
@@ -432,7 +438,7 @@ mod tests {
         let count: u8 = 50;
         for i in 0..count {
             let h = BytesN::from_array(&env, &[i; 32]);
-            client.anchor(&api_signer, &h, &make_nonce(&env, i)).unwrap();
+            client.anchor(&api_signer, &h, &make_nonce(&env, i));
         }
         assert_eq!(client.total_anchors(), u32::from(count));
         assert!(client.is_anchored(&BytesN::from_array(&env, &[0u8; 32])));
@@ -444,8 +450,8 @@ mod tests {
         let (env, api_signer, client) = setup();
         let all_zeros = BytesN::from_array(&env, &[0x00u8; 32]);
         let all_ones = BytesN::from_array(&env, &[0xFFu8; 32]);
-        client.anchor(&api_signer, &all_zeros, &make_nonce(&env, 1)).unwrap();
-        client.anchor(&api_signer, &all_ones, &make_nonce(&env, 2)).unwrap();
+        client.anchor(&api_signer, &all_zeros, &make_nonce(&env, 1));
+        client.anchor(&api_signer, &all_ones, &make_nonce(&env, 2));
         assert!(client.is_anchored(&all_zeros));
         assert!(client.is_anchored(&all_ones));
         assert_eq!(client.total_anchors(), 2);
@@ -466,7 +472,7 @@ mod tests {
         let new_signer = soroban_sdk::Address::generate(&env);
         client.set_api_signer(&new_signer);
         let h = hash(&env);
-        client.anchor(&new_signer, &h, &make_nonce(&env, 1)).unwrap();
+        client.anchor(&new_signer, &h, &make_nonce(&env, 1));
         assert!(client.is_anchored(&h));
     }
 
@@ -501,8 +507,8 @@ mod tests {
         h2_arr[2] = 2;
         let h2 = BytesN::from_array(&env, &h2_arr);
         
-        client.anchor(&api_signer, &h1, &make_nonce(&env, 1)).unwrap();
-        client.anchor(&api_signer, &h2, &make_nonce(&env, 2)).unwrap();
+        client.anchor(&api_signer, &h1, &make_nonce(&env, 1));
+        client.anchor(&api_signer, &h2, &make_nonce(&env, 2));
         
         assert!(client.is_anchored(&h1));
         assert!(client.is_anchored(&h2));
