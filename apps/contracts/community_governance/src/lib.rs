@@ -22,10 +22,7 @@
 //! | Bitmap (128-wide) | 8                     | ~0.008×       |
 
 #![no_std]
-
-use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, Map, String,
-};
+#![allow(deprecated)]
 
 // ---------------------------------------------------------------------------
 // Types
@@ -185,7 +182,7 @@ impl CommunityGovernance {
     ///
     /// # Panics
     /// * `"already initialized"` if called more than once.
-    pub fn initialize(env: Env, admin: Address, quorum: u32, voting_period_ledgers: u32) {
+    pub fn initialize(env: Env, admin: Address, _quorum: u32, voting_period_ledgers: u32) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("already initialized");
         }
@@ -245,7 +242,7 @@ impl CommunityGovernance {
     /// Set quorum in basis points (1–10 000). Admin-only.
     pub fn set_quorum_bps(env: Env, admin: Address, bps: u32) {
         admin.require_auth();
-        assert!(bps >= 1 && bps <= 10_000, "quorum_bps must be 1-10000");
+        assert!((1..=10_000).contains(&bps), "quorum_bps must be 1-10000");
         env.storage().instance().set(&DataKey::QuorumBps, &bps);
     }
 
@@ -260,7 +257,7 @@ impl CommunityGovernance {
     /// Set approval threshold in basis points (1–10 000). Admin-only.
     pub fn set_threshold_bps(env: Env, admin: Address, bps: u32) {
         admin.require_auth();
-        assert!(bps >= 1 && bps <= 10_000, "threshold_bps must be 1-10000");
+        assert!((1..=10_000).contains(&bps), "threshold_bps must be 1-10000");
         env.storage().instance().set(&DataKey::ThresholdBps, &bps);
     }
 
