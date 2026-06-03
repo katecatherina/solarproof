@@ -18,6 +18,7 @@
 
 #![no_std]
 
+#[allow(deprecated)]
 use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String};
 
 // ---------------------------------------------------------------------------
@@ -335,6 +336,41 @@ impl EnergyToken {
             .instance()
             .get(&DataKey::Admin)
             .expect("not initialized")
+    }
+
+    /// Retire all tokens held by `account`, permanently marking the address as retired.
+    ///
+    /// Burns the full balance and sets a `Retired` flag that blocks future transfers.
+    ///
+    /// # Arguments
+    /// * `account` — address retiring their tokens (must authorise).
+    /// * `reason`  — human-readable retirement reason (e.g. `"REC compliance"`).
+    ///
+    /// # Panics
+    /// * `"already retired"` if `account` is already retired.
+    /// * `"no balance to retire"` if `account` holds zero tokens.
+    ///
+    /// # Events
+    /// Emits `(topic: "retire", data: (account, amount, reason))`.
+    pub fn retire(env: Env, account: Address, reason: String) {
+        account.require_auth();
+        assert!(
+            !env.storage()
+                .persistent()
+                .get::<_, bool>(&DataKey::Retired(account.clone()))
+                .unwrap_or(false),
+            "already retired"
+        );
+        let key = (symbol_short!("balance"), account.clone());
+        let bal: i128 = env.storage().persistent().get(&key).unwrap_or(0);
+        assert!(bal > 0, "no balance to retire");
+        env.storage().persistent().set(&key, &0_i128);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Retired(account.clone()), &true);
+        Self::add_burned(&env, bal);
+        env.events()
+            .publish((symbol_short!("retire"),), (account, bal, reason));
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
