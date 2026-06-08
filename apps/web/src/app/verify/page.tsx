@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Search, CheckCircle, XCircle, Shield, ExternalLink, Copy } from 'lucide-react'
 import { SectionSkeleton } from '@/components/skeleton'
 import { CopyableText } from '@/components/copy-button'
-import { useToast } from '@/components/toast'
+import { useToast } from '@/components/ToastProvider'
 
 interface ChainOfCustody {
   certificate: {
@@ -55,7 +55,7 @@ function buildSteps(data: ChainOfCustody): Step[] {
       label: 'Meter Reading',
       description: 'Physical meter recorded a signed energy reading.',
       status: mp ? 'pass' : 'fail',
-      detail: mp ? `${mp.kwh} kWh · Meter ${mp.meter_id}` : 'No meter proof found.',
+      detail: mp ? `${Number(mp.kwh).toFixed(3)} kWh · Meter ${mp.meter_id}` : 'No meter proof found.',
     },
     {
       id: 'signature',
@@ -82,7 +82,7 @@ function buildSteps(data: ChainOfCustody): Step[] {
       description: 'Energy token (1 token = 1 kWh) minted on Stellar.',
       status: data.on_chain.mint_tx ? 'pass' : 'fail',
       detail: data.on_chain.mint_tx
-        ? `Tx ${data.on_chain.mint_tx.slice(0, 12)}… · ${data.certificate.kwh} kWh`
+        ? `Tx ${data.on_chain.mint_tx.slice(0, 12)}… · ${Number(data.certificate.kwh).toFixed(3)} kWh`
         : 'Mint transaction not found.',
       link: data.on_chain.mint_explorer,
     },
@@ -101,12 +101,12 @@ function buildSteps(data: ChainOfCustody): Step[] {
 export default function VerifyPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { toast } = useToast()
   const [query, setQuery] = useState(searchParams.get('id') ?? '')
   const [result, setResult] = useState<ChainOfCustody | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const { pushToast: toast } = useToast()
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
@@ -122,12 +122,12 @@ export default function VerifyPage() {
       if (!res.ok) {
         const message = data.error || 'Unable to verify certificate'
         setError(message)
-        toast('error', message)
+        toast({ variant: 'error', title: 'Verification failed', description: message })
         return
       }
 
       setResult(data)
-      toast('success', 'Full chain of custody confirmed.')
+      toast({ variant: 'success', title: 'Certificate verified', description: 'Full chain of custody confirmed.' })
     } catch {
       setError('Network error — please try again.')
     } finally {
@@ -202,7 +202,7 @@ export default function VerifyPage() {
         </div>
       )}
 
-      {steps && result && !loading && (
+      {steps && !loading && (
         <div className="space-y-6">
           {/* Overall status */}
           <div
@@ -285,7 +285,7 @@ export default function VerifyPage() {
             })}
           </ol>
 
-          {result.meter_proof && (
+          {result?.meter_proof && (
             <Section title="Meter proof">
               <Row label="Meter ID" value={result.meter_proof.meter_id} mono copyable />
               <Row
@@ -302,7 +302,7 @@ export default function VerifyPage() {
                 mono
                 copyable
               />
-              <Row label="kWh" value={String(result.meter_proof.kwh)} />
+              <Row label="kWh" value={Number(result.meter_proof.kwh).toFixed(3)} />
               <Row
                 label="Timestamp"
                 value={new Date(result.meter_proof.timestamp).toLocaleString()}
@@ -312,6 +312,15 @@ export default function VerifyPage() {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{title}</h3>
+      <dl className="space-y-2 text-sm">{children}</dl>
     </div>
   )
 }
@@ -334,15 +343,6 @@ function StepIcon({ status }: { status: StepStatus }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-      <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{title}</h3>
-      <dl className="space-y-4">{children}</dl>
-    </div>
-  )
-}
-
 function Row({
   label,
   value,
@@ -360,8 +360,8 @@ function Row({
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <dt className="shrink-0 text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider">{label}</dt>
-      <dd className={`break-all text-right text-gray-900 dark:text-gray-100 ${mono ? 'font-mono text-xs' : 'text-sm'}`}>
+      <dt className="shrink-0 text-gray-500 dark:text-gray-400">{label}</dt>
+      <dd className={`break-all text-right text-gray-900 dark:text-gray-100 ${mono ? 'font-mono text-xs' : ''}`}>
         {link ? (
           <a
             href={link}
