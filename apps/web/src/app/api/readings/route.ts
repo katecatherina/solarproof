@@ -134,8 +134,6 @@ export async function POST(req: NextRequest) {
   }
 
   const { meter_id, kwh, timestamp, signature_hex, nonce } = parsed.data
-<<<<<<< HEAD
-=======
   const limit = Number(process.env.READINGS_RATE_LIMIT_PER_MINUTE ?? 60)
   const windowSeconds = Number(process.env.READINGS_RATE_LIMIT_WINDOW_SECONDS ?? 60)
 
@@ -157,7 +155,6 @@ export async function POST(req: NextRequest) {
       )
     }
   }
->>>>>>> origin/main
 
   const db = createServiceClient()
 
@@ -190,11 +187,7 @@ export async function POST(req: NextRequest) {
     .select('id, pubkey_hex, cooperative_id, api_key, cooperatives(admin_address)')
     .eq('id', meter_id)
     .eq('active', true)
-<<<<<<< HEAD
     .single()
-=======
-    .single() as { data: { id: string; pubkey_hex: string; cooperative_id: string; api_key: string; cooperatives: { admin_address: string } | null } | null }
->>>>>>> origin/main
 
   if (!meter) {
     log.warn('readings.post.meter_not_found_or_revoked', { meter_id })
