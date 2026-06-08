@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest'
 import { generateCsrfToken, validateCsrfToken } from '../csrf'
 
 describe('CSRF token', () => {
@@ -17,9 +18,9 @@ describe('CSRF token', () => {
     expect(validateCsrfToken('')).toBe(false)
   })
 
-  it('rejects an expired token', () => {
+  it('rejects an expired token', async () => {
     // Forge a token with a timestamp 2 hours in the past
-    const { createHmac } = require('crypto')
+    const { createHmac } = await import('crypto')
     const secret = process.env.CSRF_SECRET ?? 'dev-csrf-secret-change-in-production'
     const nonce = 'aabbccddeeff00112233445566778899'
     const ts = (Date.now() - 2 * 60 * 60 * 1000).toString()

@@ -15,9 +15,9 @@ import {
   Networks,
   BASE_FEE,
   Contract,
-  SorobanRpc,
   xdr,
 } from '@stellar/stellar-sdk'
+import * as SorobanRpc from '@stellar/stellar-sdk/rpc'
 
 // ---------------------------------------------------------------------------
 // Shared test fixtures

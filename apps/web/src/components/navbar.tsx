@@ -144,7 +144,7 @@ export function Navbar({ locale }: NavbarProps) {
                     : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
                 }`}
               >
-                {t(l.labelKey as any)}
+                {t(l.labelKey as Parameters<typeof t>[0])}
               </Link>
             )
           })}
@@ -243,7 +243,7 @@ export function Navbar({ locale }: NavbarProps) {
                           : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'
                       }`}
                     >
-                      {t(l.labelKey as any)}
+                      {t(l.labelKey as Parameters<typeof t>[0])}
                     </Link>
                   </li>
                 )

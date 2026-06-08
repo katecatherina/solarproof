@@ -137,7 +137,7 @@ function mockReadingDb(meter: unknown) {
       }
       return {}
     }),
-  } as ReturnType<typeof createServiceClient>)
+  } as unknown as ReturnType<typeof createServiceClient>)
 }
 
 function mockMeterDb({ existing = null }: { existing?: unknown } = {}) {
@@ -155,7 +155,7 @@ function mockMeterDb({ existing = null }: { existing?: unknown } = {}) {
         select: vi.fn().mockReturnValue({ single: insertSingle }),
       }),
     }),
-  } as ReturnType<typeof createServiceClient>)
+  } as unknown as ReturnType<typeof createServiceClient>)
 }
 
 beforeEach(() => vi.clearAllMocks())

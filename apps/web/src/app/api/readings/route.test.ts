@@ -108,7 +108,7 @@ function mockDb(meter: unknown) {
       }
       return {}
     }),
-  } as ReturnType<typeof createServiceClient>)
+  } as unknown as ReturnType<typeof createServiceClient>)
 
   return { select, insert, update }
 }

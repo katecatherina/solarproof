@@ -151,7 +151,7 @@ export async function anchorReading(params: {
   correlationId?: string
 }): Promise<string> {
   const correlationId = params.correlationId ?? crypto.randomUUID()
-  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY)
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY!)
   const server = getServer()
   const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
   const contract = new Contract(env.NEXT_PUBLIC_AUDIT_REGISTRY_ID)
@@ -184,7 +184,7 @@ export async function retireCertificate(
   kwh: number,
   correlationId = crypto.randomUUID()
 ): Promise<string> {
-  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY)
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY!)
   const server = getServer()
   const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
   const contract = new Contract(env.NEXT_PUBLIC_ENERGY_TOKEN_ID)
@@ -254,7 +254,7 @@ export async function mintCertificates(
   kwh: number,
   correlationId = crypto.randomUUID()
 ): Promise<string> {
-  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY)
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY!)
   const server = getServer()
   const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
   const contract = new Contract(env.NEXT_PUBLIC_ENERGY_TOKEN_ID)

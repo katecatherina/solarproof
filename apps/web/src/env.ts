@@ -14,6 +14,8 @@ export const env = createEnv({
     // Fallback for local dev only — ignored when MINTER_SECRET_ARN is set
     MINTER_SECRET_KEY: z.string().min(56).optional(),
     AWS_REGION: z.string().default('us-east-1'),
+    READINGS_RATE_LIMIT_PER_MINUTE: z.string().optional(),
+    READINGS_RATE_LIMIT_WINDOW_SECONDS: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_SUPABASE_URL: z.string().url(),

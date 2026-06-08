@@ -10,8 +10,10 @@ import { fireWebhook } from '@/lib/webhooks'
 import { logger } from '@/lib/logger'
 import { requireAuth, isAuthError } from '@/lib/auth'
 import { diagnoseMintFailure } from '@/lib/tracer-sim'
+import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/idempotency'
 
 const MAX_PAGE_SIZE = 100
+const NONCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 /**
  * GET /api/v1/readings
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest) {
   const rows = data ?? []
   const hasMore = rows.length > limit
   const page = hasMore ? rows.slice(0, limit) : rows
-  const next_cursor = hasMore ? page[page.length - 1].timestamp : null
+  const next_cursor = hasMore ? (page.length > 0 ? page[page.length - 1].timestamp : null) : null
 
   return NextResponse.json({ data: page, next_cursor, total: count ?? 0 })
 }
@@ -112,25 +114,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const { meter_id, kwh, timestamp, signature_hex } = parsed.data
-  const limit = Number(process.env.READINGS_RATE_LIMIT_PER_MINUTE ?? 60)
-  const windowSeconds = Number(process.env.READINGS_RATE_LIMIT_WINDOW_SECONDS ?? 60)
-  const rateKey = `rate:readings:${meter_id}`
-
-  const rate = await enforceRateLimit(rateKey, limit, windowSeconds)
-  if (!rate.allowed) {
-    return NextResponse.json(
-      { error: 'Too many requests, please try again later' },
-      {
-        status: 429,
-        headers: {
-          'Retry-After': rate.resetSeconds.toString(),
-          'X-RateLimit-Limit': limit.toString(),
-          'X-RateLimit-Remaining': rate.remaining.toString(),
-        },
-      }
-    )
-  }
+  const { meter_id, kwh, timestamp, signature_hex, nonce } = parsed.data
 
   const db = createServiceClient()
 
@@ -142,21 +126,19 @@ export async function POST(req: NextRequest) {
   }
 
   // Idempotency check: return cached response if nonce was seen within 24 h
-  if (nonce) {
-    const { data: existing } = await db
-      .from('idempotency_keys')
-      .select('response, created_at')
-      .eq('nonce', nonce)
-      .single()
+  const { data: existingNonce } = await db
+    .from('idempotency_keys')
+    .select('response, created_at')
+    .eq('nonce', nonce)
+    .maybeSingle()
 
-    if (existing) {
-      const age = Date.now() - new Date(existing.created_at).getTime()
-      if (age < NONCE_TTL_MS) {
-        return NextResponse.json(existing.response, { status: 200 })
-      }
-      // Expired — delete and allow re-processing
-      await db.from('idempotency_keys').delete().eq('nonce', nonce)
+  if (existingNonce) {
+    const age = Date.now() - new Date(existingNonce.created_at).getTime()
+    if (age < NONCE_TTL_MS) {
+      return NextResponse.json(existingNonce.response, { status: 200 })
     }
+    // Expired — delete and allow re-processing
+    await db.from('idempotency_keys').delete().eq('nonce', nonce)
   }
 
   // Fetch meter + cooperative
@@ -165,7 +147,7 @@ export async function POST(req: NextRequest) {
     .select('id, pubkey_hex, cooperative_id, cooperatives(admin_address)')
     .eq('id', meter_id)
     .eq('active', true)
-    .single() as { data: { id: string; pubkey_hex: string; cooperative_id: string; cooperatives: { admin_address: string } | null } | null }
+    .single()
 
   if (!meter) {
     log.warn('readings.post.meter_not_found', { meter_id })

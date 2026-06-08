@@ -23,7 +23,7 @@ const VALID_BODY = {
   pubkey_hex: 'a'.repeat(64),
 }
 
-function mockDb({ existing = null, insertData = { id: 'meter-1', ...VALID_BODY, active: true } } = {}) {
+function mockDb({ existing = null as unknown, insertData = { id: 'meter-1', ...VALID_BODY, active: true } } = {}) {
   const maybeSingle = vi.fn().mockResolvedValue({ data: existing })
   const insertSingle = vi.fn().mockResolvedValue({ data: insertData, error: null })
 
@@ -36,7 +36,7 @@ function mockDb({ existing = null, insertData = { id: 'meter-1', ...VALID_BODY, 
         select: vi.fn().mockReturnValue({ single: insertSingle }),
       }),
     }),
-  } as ReturnType<typeof createServiceClient>)
+  } as unknown as ReturnType<typeof createServiceClient>)
 }
 
 beforeEach(() => vi.clearAllMocks())

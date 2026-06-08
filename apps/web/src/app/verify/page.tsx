@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Search, CheckCircle, XCircle, Shield, ExternalLink, Copy } from 'lucide-react'
 import { SectionSkeleton } from '@/components/skeleton'
 import { CopyableText } from '@/components/copy-button'
+import { useToast } from '@/components/toast'
 
 interface ChainOfCustody {
   certificate: {
@@ -100,6 +101,7 @@ function buildSteps(data: ChainOfCustody): Step[] {
 export default function VerifyPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { toast } = useToast()
   const [query, setQuery] = useState(searchParams.get('id') ?? '')
   const [result, setResult] = useState<ChainOfCustody | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -120,12 +122,12 @@ export default function VerifyPage() {
       if (!res.ok) {
         const message = data.error || 'Unable to verify certificate'
         setError(message)
-        pushToast({ variant: 'error', title: 'Verification failed', description: message })
+        toast('error', message)
         return
       }
 
       setResult(data)
-      pushToast({ variant: 'success', title: 'Certificate verified', description: 'Full chain of custody confirmed.' })
+      toast('success', 'Full chain of custody confirmed.')
     } catch {
       setError('Network error — please try again.')
     } finally {
@@ -200,7 +202,7 @@ export default function VerifyPage() {
         </div>
       )}
 
-      {steps && !loading && (
+      {steps && result && !loading && (
         <div className="space-y-6">
           {/* Overall status */}
           <div
@@ -332,6 +334,15 @@ function StepIcon({ status }: { status: StepStatus }) {
   )
 }
 
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+      <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{title}</h3>
+      <dl className="space-y-4">{children}</dl>
+    </div>
+  )
+}
+
 function Row({
   label,
   value,
@@ -349,8 +360,8 @@ function Row({
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <dt className="shrink-0 text-gray-500 dark:text-gray-400">{label}</dt>
-      <dd className={`break-all text-right text-gray-900 dark:text-gray-100 ${mono ? 'font-mono text-xs' : ''}`}>
+      <dt className="shrink-0 text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider">{label}</dt>
+      <dd className={`break-all text-right text-gray-900 dark:text-gray-100 ${mono ? 'font-mono text-xs' : 'text-sm'}`}>
         {link ? (
           <a
             href={link}
@@ -367,33 +378,6 @@ function Row({
           value
         )}
       </dd>
-    </div>
-  )
-}
-      {link ? (
-        <dd>
-          <a
-            href={link}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`${label}: ${value} (opens in new tab)`}
-            className={`flex items-center gap-1 break-all text-blue-600 hover:underline focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2 rounded dark:text-blue-400 dark:focus:ring-yellow-500 dark:focus:ring-offset-gray-900 ${
-              mono ? 'font-mono text-xs' : ''
-            }`}
-          >
-            {value}
-            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
-          </a>
-        </dd>
-      ) : (
-        <dd
-          className={`break-all text-right text-gray-900 dark:text-gray-100 ${
-            mono ? 'font-mono text-xs' : ''
-          }`}
-        >
-          {value}
-        </dd>
-      )}
     </div>
   )
 }
