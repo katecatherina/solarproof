@@ -5,6 +5,7 @@
     "enabled": true,
     "signature": true
   },
+  "globalEnv": ["NODE_ENV", "SKIP_ENV_VALIDATION"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

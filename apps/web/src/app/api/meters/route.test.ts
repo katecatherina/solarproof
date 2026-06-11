@@ -26,7 +26,7 @@ function mockDbGet(data: unknown[], error: unknown = null) {
         }),
       }),
     }),
-  } as ReturnType<typeof createServiceClient>)
+  } as unknown as ReturnType<typeof createServiceClient>)
 }
 
 function makeRequest(body: unknown) {

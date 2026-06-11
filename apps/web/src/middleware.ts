@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { randomUUID } from 'crypto'
 import { getCorsHeaders } from '@/lib/cors'
 
 /**
@@ -55,7 +54,7 @@ export function middleware(req: NextRequest) {
     redirect.headers.set('Link', `<${url.toString()}>; rel="successor-version"`)
     redirect.headers.set('API-Version', 'v1')
     // Propagate correlation ID on the redirect response too
-    const correlationId = req.headers.get('x-correlation-id') ?? randomUUID()
+    const correlationId = req.headers.get('x-correlation-id') ?? crypto.randomUUID()
     redirect.headers.set('x-correlation-id', correlationId)
     if (corsHeaders) {
       for (const [k, v] of Object.entries(corsHeaders)) {
@@ -66,7 +65,7 @@ export function middleware(req: NextRequest) {
   }
 
   // ── Correlation ID injection ──────────────────────────────────────────────
-  const correlationId = req.headers.get('x-correlation-id') ?? randomUUID()
+  const correlationId = req.headers.get('x-correlation-id') ?? crypto.randomUUID()
   const res = NextResponse.next({
     request: {
       headers: new Headers({

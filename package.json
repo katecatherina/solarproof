@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "End-to-end cryptographic proof of renewable energy on Stellar",
   "scripts": {
-    "build": "turbo build",
+    "build": "SKIP_ENV_VALIDATION=1 turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
     "type-check": "turbo type-check",

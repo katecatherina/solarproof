@@ -4,22 +4,18 @@ import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase'
 import { computeReadingHash } from '@/lib/crypto'
 import { kwhToStroops } from '@solarproof/stellar'
-import { invalidateCert, checkRateLimit } from '@/lib/cache'
+import { checkRateLimit } from '@/lib/cache'
 import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/idempotency'
-import { fireWebhook } from '@/lib/webhooks'
 import { logger } from '@/lib/logger'
 import { requireAuth, isAuthError } from '@/lib/auth'
-import { diagnoseMintFailure } from '@/lib/tracer-sim'
-import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/idempotency'
 import { enqueue } from '@/lib/queue'
 
-const MAX_PAGE_SIZE = 100
 const NONCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL
 
 /** Simple per-key rate limiter (no-op when Redis is unavailable). */
 async function checkRateLimitByKey(
-  _key: string, _limit: number, _windowSeconds: number
+  _key: string, _limit: number
 ): Promise<{ allowed: boolean; resetSeconds: number; remaining: number }> {
   // Falls back to allow-all; the pubkey-based checkRateLimit handles enforcement
   return { allowed: true, resetSeconds: 0, remaining: _limit }
@@ -77,21 +73,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ data: page, next_cursor, total: count ?? 0 })
 }
 
-function extractErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  if (typeof err === 'string') return err
-  try {
-    return JSON.stringify(err)
-  } catch {
-    return 'Unknown error'
-  }
-}
-
-function isAlreadyAnchoredError(err: unknown): boolean {
-  const message = extractErrorMessage(err).toLowerCase()
-  return message.includes('alreadyanchored') || message.includes('reading already anchored') || message.includes('duplicate')
-}
-
 const ReadingSchema = z.object({
   meter_id: z.string().uuid(),
   kwh: z.number().positive(),
@@ -135,12 +116,10 @@ export async function POST(req: NextRequest) {
 
   const { meter_id, kwh, timestamp, signature_hex, nonce } = parsed.data
   const limit = Number(process.env.READINGS_RATE_LIMIT_PER_MINUTE ?? 60)
-  const windowSeconds = Number(process.env.READINGS_RATE_LIMIT_WINDOW_SECONDS ?? 60)
-
   // Redis-backed sliding-window rate limit by meter_id
   const rateKey = `rate:readings:${meter_id}`
   if (UPSTASH_REDIS_REST_URL) {
-    const rate = await checkRateLimitByKey(rateKey, limit, windowSeconds)
+    const rate = await checkRateLimitByKey(rateKey, limit)
     if (!rate.allowed) {
       return NextResponse.json(
         { error: 'Too many requests, please try again later' },
@@ -184,7 +163,7 @@ export async function POST(req: NextRequest) {
   // Fetch meter + cooperative
   const { data: meter } = await db
     .from('meters')
-    .select('id, pubkey_hex, cooperative_id, api_key, cooperatives(admin_address)')
+    .select('id, pubkey_hex, cooperative_id, api_key')
     .eq('id', meter_id)
     .eq('active', true)
     .single()
@@ -247,8 +226,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to save reading' }, { status: 500 })
   }
 
-  const cooperative = meter.cooperatives as { admin_address: string } | null
-  const recipient = cooperative?.admin_address
+  const { data: coop } = await db
+    .from('cooperatives')
+    .select('admin_address')
+    .eq('id', meter.cooperative_id)
+    .single()
+
+  const recipient = coop?.admin_address
   if (!recipient) {
     log.error('readings.post.missing_recipient', { reading_id: reading.id, cooperative_id: meter.cooperative_id })
     return NextResponse.json({ error: 'No cooperative admin address' }, { status: 500 })

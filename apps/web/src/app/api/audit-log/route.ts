@@ -28,21 +28,21 @@ export async function GET(req: NextRequest) {
 
   const db = createServiceClient()
   let query = db
-    .from('audit_log')
-    .select('id,operator_id,action,resource_id,ip_address,metadata,created_at')
-    .gte('created_at', from)
-    .lte('created_at', to)
-    .order('created_at', { ascending: true })
+    .from('audit_logs')
+    .select('id,actor,action,resource,resource_id,ip,metadata,timestamp')
+    .gte('timestamp', from)
+    .lte('timestamp', to)
+    .order('timestamp', { ascending: true })
 
-  if (operatorId) query = query.eq('operator_id', operatorId)
+  if (operatorId) query = query.eq('actor', operatorId)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const header = 'id,operator_id,action,resource_id,ip_address,metadata,created_at\n'
   const rows = (data ?? []).map(r =>
-    [r.id, r.operator_id, r.action, r.resource_id ?? '', r.ip_address ?? '',
-     JSON.stringify(r.metadata ?? {}), r.created_at]
+    [r.id, r.actor, r.action, r.resource_id ?? '', r.ip ?? '',
+     JSON.stringify(r.metadata ?? {}), r.timestamp]
       .map(v => `"${String(v).replace(/"/g, '""')}"`)
       .join(',')
   ).join('\n')

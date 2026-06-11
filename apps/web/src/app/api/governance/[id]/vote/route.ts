@@ -10,11 +10,11 @@ const VoteSchema = z.object({
 const ParamsSchema = z.object({ id: z.string().uuid() })
 
 /** POST /api/governance/[id]/vote — cast a vote */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth(req)
   if (isAuthError(auth)) return auth
 
-  const parsedParams = ParamsSchema.safeParse(params)
+  const parsedParams = ParamsSchema.safeParse(await params)
   if (!parsedParams.success) {
     return NextResponse.json({ error: parsedParams.error.flatten() }, { status: 400 })
   }

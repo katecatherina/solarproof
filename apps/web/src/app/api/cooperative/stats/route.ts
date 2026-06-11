@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
   if (meterResult.error) return NextResponse.json({ error: meterResult.error.message }, { status: 500 })
 
   // Calculate summary totals from the trends results
-  const summary = (summaryResult.data as any[]).reduce(
+  const summary = (summaryResult.data as { kwh: number; certs_issued: number; certs_retired: number }[]).reduce(
     (acc, curr) => ({
       total_kwh: acc.total_kwh + Number(curr.kwh),
       certificates_issued: acc.certificates_issued + Number(curr.certs_issued),

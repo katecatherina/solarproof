@@ -10,14 +10,12 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
   Legend,
   LineChart,
   Line,
 } from 'recharts'
 import { useTheme } from 'next-themes'
-import { Zap, Award, Leaf, TrendingUp, Download, Wifi, WifiOff, Calendar, Filter } from 'lucide-react'
+import { Zap, Award, Leaf, TrendingUp, Download } from 'lucide-react'
 import { StatCardSkeleton, ChartSkeleton, TableRowSkeleton } from '@/components/skeleton'
 import { useState, useMemo } from 'react'
 import { useRealtimeReadings } from '@/hooks/use-realtime-readings'
@@ -135,10 +133,11 @@ function useChartColors() {
 // ---------------------------------------------------------------------------
 // CSV export
 // ---------------------------------------------------------------------------
-function exportCsv(data: any[], filename: string) {
+function exportCsv(data: object[], filename: string) {
   if (!data || data.length === 0) return
-  const headers = Object.keys(data[0]).join(',')
-  const body = data.map((row) => Object.values(row).map(v => `"${v}"`).join(',')).join('\n')
+  const rows = data as Record<string, unknown>[]
+  const headers = Object.keys(rows[0]).join(',')
+  const body = rows.map((row) => Object.values(row).map(v => `"${v}"`).join(',')).join('\n')
   const blob = new Blob([`${headers}\n${body}`], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

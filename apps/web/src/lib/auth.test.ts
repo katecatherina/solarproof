@@ -53,7 +53,7 @@ describe('requireAuth', () => {
 
   it('returns user when token is valid', async () => {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-1', email: 'op@example.com' } },
+      data: { user: { id: 'user-1', email: 'op@example.com', app_metadata: { cooperative_id: 'coop-1' } } },
       error: null,
     })
     const result = await requireAuth(makeRequest('Bearer valid-token'))

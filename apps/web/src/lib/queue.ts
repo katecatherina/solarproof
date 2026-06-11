@@ -58,7 +58,7 @@ export async function enqueue(
   // Persist a job record so the HTTP poll endpoint works immediately
   const { data, error } = await db
     .from('jobs')
-    .insert({ type, payload, status: 'pending', attempts: 0 })
+    .insert({ type, payload: payload as import('@/lib/database.types').Json, status: 'pending', attempts: 0 })
     .select('id')
     .single()
 
@@ -106,8 +106,8 @@ async function processJob(job: Job): Promise<void> {
   await db.from('jobs').update({ status: 'running', attempts: job.attemptsMade + 1 }).eq('id', dbJobId)
 
   try {
-    const result = await runAnchorAndMint(payload as AnchorAndMintPayload)
-    await db.from('jobs').update({ status: 'done', result }).eq('id', dbJobId)
+    const result = await runAnchorAndMint(payload as unknown as AnchorAndMintPayload)
+    await db.from('jobs').update({ status: 'done', result: result as import('@/lib/database.types').Json }).eq('id', dbJobId)
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
     const isFinal = job.attemptsMade + 1 >= (job.opts.attempts ?? 3)

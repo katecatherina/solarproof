@@ -23,39 +23,6 @@ const CERT = {
   readings: { meter_id: 'meter-1' },
 }
 
-function mockDb(data: unknown[], error: unknown = null, count = 1) {
-  const query: Record<string, unknown> = {}
-  const chain = (obj: Record<string, unknown>) => {
-    ;['select', 'order', 'limit', 'lt', 'eq', 'gte', 'lte', 'or'].forEach((m) => {
-      obj[m] = vi.fn().mockReturnValue(obj)
-    })
-    obj.then = undefined
-    // Make it thenable for await
-    Object.defineProperty(obj, Symbol.iterator, { value: undefined })
-    return obj
-  }
-  const q = chain(query)
-  // Final await resolves with data
-  ;(q as unknown as Promise<unknown>)[Symbol.for('vitest-mock-result')] = { data, error, count }
-  vi.mocked(createServiceClient).mockReturnValue({
-    from: vi.fn().mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        order: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            lt: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            gte: vi.fn().mockReturnThis(),
-            lte: vi.fn().mockReturnThis(),
-            or: vi.fn().mockResolvedValue({ data, error, count }),
-            then: undefined,
-            // make it awaitable
-            [Symbol.toStringTag]: 'Promise',
-          }),
-        }),
-      }),
-    }),
-  } as ReturnType<typeof createServiceClient>)
-}
 
 function mockDbSimple(data: unknown[], error: unknown = null, count = data.length) {
   const terminal = vi.fn().mockResolvedValue({ data, error, count })
@@ -75,7 +42,7 @@ function mockDbSimple(data: unknown[], error: unknown = null, count = data.lengt
         }),
       }),
     }),
-  } as ReturnType<typeof createServiceClient>)
+  } as unknown as ReturnType<typeof createServiceClient>)
   return terminal
 }
 

@@ -5,7 +5,6 @@ import { env } from '@/env'
 import { createHash } from 'crypto'
 
 const NETWORK_PASSPHRASE = Networks.TESTNET
-const RPC_URL = 'https://soroban-testnet.stellar.org'
 const RPC_TIMEOUT_MS = 10_000
 
 // ---------------------------------------------------------------------------
@@ -105,10 +104,6 @@ async function rpcCall<T>(fn: () => Promise<T>, correlationId: string): Promise<
     throw err
   }
 }
-
-/** Delays that grow as 1 s, 2 s, 4 s for attempts 1, 2, 3. */
-const BACKOFF_MS = [1_000, 2_000, 4_000]
-const MAX_RETRIES = 3
 
 /** Return a Soroban RPC server pointed at the configured testnet endpoint. */
 function getServer() {
@@ -251,7 +246,7 @@ export async function transferCertificate(
   kwh: number,
   correlationId = crypto.randomUUID()
 ): Promise<string> {
-  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY)
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY!)
   const server = getServer()
   const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
   const contract = new Contract(env.NEXT_PUBLIC_ENERGY_TOKEN_ID)

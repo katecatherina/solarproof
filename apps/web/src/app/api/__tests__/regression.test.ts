@@ -90,7 +90,13 @@ function makeMeterRequest(body: unknown) {
 }
 
 function mockReadingDb(meter: unknown) {
+  const meterData = meter as { cooperatives?: { admin_address: string } | null } | null
+  const adminAddress = meterData?.cooperatives?.admin_address ?? null
   const single = vi.fn().mockResolvedValue({ data: meter, error: null })
+  const coopSingle = vi.fn().mockResolvedValue({
+    data: adminAddress ? { admin_address: adminAddress } : null,
+    error: null,
+  })
   const readingSingle = vi.fn().mockResolvedValue({
     data: { id: 'reading-id-1' },
     error: null,
@@ -105,6 +111,13 @@ function mockReadingDb(meter: unknown) {
             eq: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({ single }),
             }),
+          }),
+        }
+      }
+      if (table === 'cooperatives') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({ single: coopSingle }),
           }),
         }
       }

@@ -50,6 +50,6 @@ export async function register() {
   sdk.start()
 
   // Start the BullMQ worker for async Stellar transaction processing
-  const { startWorker } = await import('@/lib/queue')
+  const { startWorker } = await import(/* webpackIgnore: true */ '@/lib/queue')
   startWorker()
 }

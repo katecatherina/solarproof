@@ -17,7 +17,7 @@ const mockUpdate = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ err
 const mockFrom = vi.fn().mockReturnValue({ update: mockUpdate })
 
 vi.mock('@/lib/supabase', () => ({
-  createServiceClient: () => ({ from: mockFrom }),
+  createServiceClient: vi.fn(() => ({ from: vi.fn().mockReturnValue({ update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }) }) })),
 }))
 
 // ---------------------------------------------------------------------------

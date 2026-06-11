@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Process votes into tallies and check if user has voted
-  const proposals = data.map((p: any) => {
-    const votes = p.votes as { choice: string }[]
+  const proposals = (data ?? []).map((p) => {
+    const votes = ((p as unknown as { votes?: { choice: string }[] }).votes) ?? []
     const tally = {
       for: votes.filter(v => v.choice === 'for').length,
       against: votes.filter(v => v.choice === 'against').length,

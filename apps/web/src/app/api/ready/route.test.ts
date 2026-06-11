@@ -12,7 +12,7 @@ function mockDb(error: unknown = null) {
         limit: vi.fn().mockResolvedValue({ data: [{ id: '1' }], error }),
       }),
     }),
-  } as ReturnType<typeof createServiceClient>)
+  } as unknown as ReturnType<typeof createServiceClient>)
 }
 
 beforeEach(() => vi.clearAllMocks())

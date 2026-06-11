@@ -31,7 +31,7 @@ export async function GET(
   const db = createServiceClient()
   const { data: cert } = await db
     .from('certificates')
-    .select('id, kwh, issued_at, retired, retired_at, retired_by, mint_tx_hash, cooperative_id, readings!inner(meter_id)')
+    .select('id, kwh, issued_at, retired, retired_at, retired_by, mint_tx_hash, cooperative_id')
     .eq('id', id)
     .single()
 
@@ -39,8 +39,14 @@ export async function GET(
     return NextResponse.json({ error: 'Certificate not found' }, { status: 404 })
   }
 
-  const readings = cert.readings as { meter_id: string } | { meter_id: string }[]
-  const meter_id = Array.isArray(readings) ? readings[0]?.meter_id : readings?.meter_id ?? null
+  // Fetch the related reading to get meter_id
+  const { data: reading } = await db
+    .from('readings')
+    .select('meter_id')
+    .eq('id', (await db.from('certificates').select('reading_id').eq('id', id).single()).data?.reading_id ?? '')
+    .maybeSingle()
+
+  const meter_id = reading?.meter_id ?? null
 
   const xml = buildIRecXml({
     id: cert.id,

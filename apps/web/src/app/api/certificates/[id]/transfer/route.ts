@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { isValidStellarAddress } from '@stellar/stellar-sdk'
+import { StrKey } from '@stellar/stellar-sdk'
 import { createServiceClient } from '@/lib/supabase'
 import { transferCertificate } from '@/lib/stellar'
 import { auditLog } from '@/lib/audit'
@@ -39,7 +39,7 @@ export async function POST(
 
   const { from_address, to_address } = parsed.data
 
-  if (!isValidStellarAddress(to_address)) {
+  if (!StrKey.isValidEd25519PublicKey(to_address)) {
     return NextResponse.json({ error: 'Invalid recipient Stellar address' }, { status: 400 })
   }
 
@@ -77,7 +77,7 @@ export async function POST(
     metadata: { from_address, to_address, transfer_tx_hash: transferTxHash },
   })
 
-  void fireWebhook(cert.cooperative_id, 'transfer', {
+  void fireWebhook(cert.cooperative_id, 'certificate.transferred', {
     certificate_id: id,
     from_address,
     to_address,
