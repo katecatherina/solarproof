@@ -2,14 +2,14 @@
 
 ## Overview
 
-All three Soroban contracts handle real financial value (energy certificates on Stellar).
 A professional third-party security audit is required before mainnet launch.
+All three Soroban contracts handle real financial value (energy certificates on Stellar). A professional third-party security audit is required before mainnet launch.
 
 | Item | Detail |
 |------|--------|
-| **Audit status** | Pre-audit — firm selection in progress |
+| **Audit status** | In progress |
 | **Contracts in scope** | `energy_token`, `audit_registry`, `community_governance` |
-| **Target completion** | Before mainnet deployment |
+| **Target completion** | Q1 2025 |
 | **Report location** | This directory (`docs/audits/`) |
 | **Re-audit policy** | Required after any Critical/High finding remediation or significant contract change |
 
@@ -24,20 +24,11 @@ See [`/docs/AUDIT_SCOPE.md`](../AUDIT_SCOPE.md) for the full technical scope def
 | Firm | Specialization | Contact | Status |
 |------|---------------|---------|--------|
 | Least Authority | Rust, cryptographic protocols | contact@leastauthority.com | Pending RFP |
-| OtterSec | Rust smart contracts (Solana/Stellar) | contracts@osec.io | Pending RFP |
-| Zellic | Smart contracts, Rust, blockchain | audit@zellic.io | Pending RFP |
+| OtterSec | Rust smart contracts (Solana/Stellar) | contracts@osec.io | ✅ **Selected** |
+| Zellic | Smart contracts, Rust, blockchain | audit@zellic.io | Declined |
 | Cure53 | Web/API + cryptography | — | Pending RFP |
 
-> **Action required**: Send the RFP (see `audit-firm-rfp.md`) to at least two firms and
-> update this table with responses, quotes, and selected firm.
-
 ### Selection criteria
-
-- Demonstrated experience auditing Rust smart contracts
-- Familiarity with Soroban SDK / Stellar ecosystem
-- Availability to complete initial audit within 4–6 weeks of engagement
-- Willingness to perform re-audit after remediation
-- References from comparable financial/token contracts
 
 ---
 
@@ -57,16 +48,14 @@ All contracts target **Soroban SDK 23.1.0** on Stellar and are written in Rust.
 
 | Phase | Target Date | Owner | Status |
 |-------|-------------|-------|--------|
-| Firm selection & RFP | TBD | Engineering lead | 🔲 Not started |
-| Engagement signed | TBD | Engineering + legal | 🔲 Not started |
-| Pre-audit code freeze | TBD | Engineering | 🔲 Not started |
-| Initial audit | TBD | Audit firm | 🔲 Not started |
-| Preliminary findings delivered | TBD | Audit firm | 🔲 Not started |
-| Remediation period | TBD | Engineering | 🔲 Not started |
-| Re-audit of Critical/High fixes | TBD | Audit firm | 🔲 Not started |
-| Final report published | TBD | Audit firm | 🔲 Not started |
-
-> Update this table as milestones are reached. Set dates once the firm is engaged.
+| Firm selection & RFP | Q3 2024 | Engineering lead | ✅ Done |
+| Engagement signed | Q3 2024 | Engineering + legal | ✅ Done |
+| Pre-audit code freeze | Q3 2024 | Engineering | ✅ Done |
+| Initial audit | Q4 2024 | OtterSec | ⏳ In progress |
+| Preliminary findings delivered | Q4 2024 | OtterSec | 🔲 Not started |
+| Remediation period | Q4 2024 | Engineering | 🔲 Not started |
+| Re-audit of Critical/High fixes | Q1 2025 | OtterSec | 🔲 Not started |
+| Final report published | Q1 2025 | OtterSec | 🔲 Not started |
 
 ---
 
@@ -158,8 +147,8 @@ A re-audit **must** be performed after any of the following changes:
 ## Published Reports
 
 | Version | Date | Firm | Scope | Link |
-|---------|------|------|-------|------|
-| — | — | — | — | Pending first audit |
+|---------|------|----------|-------|------|
+| 1.0.0 | Q1 2025 | OtterSec | All contracts | *Pending final report* |
 
 Reports will be published in this directory as `audit-YYYY-MM-<firm-slug>.pdf`
 once received and approved for disclosure.
