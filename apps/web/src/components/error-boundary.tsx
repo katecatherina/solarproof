@@ -6,9 +6,8 @@ import { AlertTriangle } from 'lucide-react'
 
 interface Props {
   children: React.ReactNode
+  /** Smaller inline fallback for panel-level boundaries */
   inline?: boolean
-  resetKey?: unknown
-  onReset?: () => void
 }
 
 interface State {
@@ -22,24 +21,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { error }
   }
 
-  componentDidUpdate(prevProps: Props) {
-    if (this.props.resetKey !== prevProps.resetKey) {
-      this.setState({ error: null })
-    }
-  }
-
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     Sentry.captureException(error, { extra: { componentStack: info.componentStack } })
   }
 
-  reset = () => {
-    this.setState({ error: null })
-    this.props.onReset?.()
-  }
+  reset = () => this.setState({ error: null })
 
   render() {
-    const { error } = this.state
-    if (!error) return this.props.children
+    if (!this.state.error) return this.props.children
 
     if (this.props.inline) {
       return (
@@ -49,7 +38,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
         >
           <AlertTriangle className="h-6 w-6 text-red-500" aria-hidden="true" />
           <p className="text-sm font-medium text-red-700 dark:text-red-400">
-            This section failed to load.
+            This panel failed to load.
           </p>
           <button
             onClick={this.reset}
