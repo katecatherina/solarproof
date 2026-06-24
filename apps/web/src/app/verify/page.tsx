@@ -108,7 +108,7 @@ export default function VerifyPage() {
   const [copied, setCopied] = useState(false)
   const { pushToast: toast } = useToast()
 
-  async function handleVerify(e: React.FormEvent) {
+  function handleVerify(e: React.FormEvent) {
     e.preventDefault()
     const q = query.trim()
     if (!q) return
