@@ -149,7 +149,7 @@ Returns the total number of proposals created.
 ---
 
 ## Events
-
+Governance events are emitted into the Soroban ledger and can be consumed by off-chain services to track proposal state changes. Consumers should use the event topic and payload to rebuild proposal history.
 | Topic | Data | Emitted by |
 |---|---|---|
 | `"propose"` | `proposal_id: u32` | `propose` |

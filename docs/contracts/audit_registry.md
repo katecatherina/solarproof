@@ -146,7 +146,7 @@ Returns the admin address.
 ---
 
 ## Events
-
+Audit events are emitted when a meter reading is anchored. Off-chain consumers can index `anchor` events to verify that readings were registered on-chain and to build a public audit trail.
 | Topic | Data | Emitted by |
 |---|---|---|
 | `"anchor"` | `(reading_hash: BytesN<32>, ledger_sequence: u32, ledger_timestamp: u64)` | `anchor` |
