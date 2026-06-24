@@ -97,6 +97,10 @@ impl CommunityGovernance {
     pub fn proposal_count(env: Env) -> u32 {
         env.storage().instance().get(&DataKey::ProposalCount).unwrap_or(0)
     }
+
+    pub fn admin(env: Env) -> Address {
+        env.storage().instance().get(&DataKey::Admin).expect("not initialized")
+    }
 }
 
 #[cfg(test)]
@@ -104,18 +108,25 @@ mod tests {
     use super::*;
     use soroban_sdk::{testutils::Address as _, Env, String};
 
-    fn setup() -> (Env, CommunityGovernanceClient<'static>) {
+    fn setup() -> (Env, CommunityGovernanceClient<'static>, Address) {
         let env = Env::default();
         env.mock_all_auths();
         let id = env.register(CommunityGovernance, ());
         let client = CommunityGovernanceClient::new(&env, &id);
-        client.initialize(&Address::generate(&env), &51_u32, &100_u32);
-        (env, client)
+        let admin = Address::generate(&env);
+        client.initialize(&admin, &51_u32, &100_u32);
+        (env, client, admin)
+    }
+
+    #[test]
+    fn test_admin_lookup() {
+        let (_env, client, admin) = setup();
+        assert_eq!(client.admin(), admin);
     }
 
     #[test]
     fn test_propose_and_pass() {
-        let (env, client) = setup();
+        let (env, client, _admin) = setup();
         let proposer = Address::generate(&env);
         let id = client.propose(&proposer, &String::from_str(&env, "Test"), &String::from_str(&env, "Desc"));
         client.vote(&Address::generate(&env), &id, &true);

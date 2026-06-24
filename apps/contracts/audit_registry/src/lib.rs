@@ -205,4 +205,11 @@ mod tests {
         assert!(!client.is_anchored(&hash));
         assert!(client.verify(&hash).is_none());
     }
+
+    #[test]
+    fn test_admin_lookup() {
+        let (env, client) = setup();
+        let admin = client.admin();
+        assert_eq!(admin, Address::generate(&env));
+    }
 }
