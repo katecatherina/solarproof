@@ -41,6 +41,24 @@ stellar contract invoke --id <CONTRACT_ID> -- mint \
   --amount 10000000
 ```
 
+## Debugging with tracer-sim
+
+Use `stellar contract invoke --send=no` to simulate a contract call without submitting
+it to the network. This is useful for checking authorization, transaction cost,
+and whether the function will succeed before sending the final transaction.
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no -- mint --to GABC...XYZ --amount 10000000
+```
+
+To print estimated execution cost to stderr:
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no --cost -- mint --to GABC...XYZ --amount 10000000
+```
+
 ---
 
 ### `burn(env, from, amount)`

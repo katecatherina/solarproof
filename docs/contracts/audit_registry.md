@@ -75,6 +75,34 @@ stellar contract invoke --id <CONTRACT_ID> -- anchor \
   --timestamp 1700000000
 ```
 
+## Debugging with tracer-sim
+
+Simulate the anchor call before sending it to the network using `--send=no`.
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no -- anchor \
+  --reading_hash <32-byte-hex> \
+  --meter_pubkey <32-byte-hex> \
+  --signature <64-byte-hex> \
+  --kwh_stroops 125000000 \
+  --meter_id "METER-001" \
+  --timestamp 1700000000
+```
+
+Use `--cost` to print the estimated resource cost.
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no --cost -- anchor \
+  --reading_hash <32-byte-hex> \
+  --meter_pubkey <32-byte-hex> \
+  --signature <64-byte-hex> \
+  --kwh_stroops 125000000 \
+  --meter_id "METER-001" \
+  --timestamp 1700000000
+```
+
 ---
 
 ### `verify(env, reading_hash) → Option<AuditAnchor>`

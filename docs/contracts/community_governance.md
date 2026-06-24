@@ -66,6 +66,28 @@ stellar contract invoke --id <CONTRACT_ID> -- propose \
   --description "Allow anchoring multiple readings in one transaction"
 ```
 
+## Debugging with tracer-sim
+
+Simulate governance calls without submitting a network transaction.
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no -- propose \
+  --proposer GABC...XYZ \
+  --title "Add batch anchor support" \
+  --description "Allow anchoring multiple readings in one transaction"
+```
+
+To estimate the gas and contract resource usage for a proposal or vote:
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no --cost -- propose \
+  --proposer GABC...XYZ \
+  --title "Add batch anchor support" \
+  --description "Allow anchoring multiple readings in one transaction"
+```
+
 ---
 
 ### `vote(env, voter, proposal_id, approve)`
