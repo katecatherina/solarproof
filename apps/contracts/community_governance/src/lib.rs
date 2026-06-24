@@ -640,6 +640,10 @@ impl CommunityGovernance {
             .get(&DataKey::ProposalCount)
             .unwrap_or(0)
     }
+
+    pub fn admin(env: Env) -> Address {
+        env.storage().instance().get(&DataKey::Admin).expect("not initialized")
+    }
 }
 
 // ---------------------------------------------------------------------------

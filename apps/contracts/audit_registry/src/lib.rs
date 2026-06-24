@@ -546,4 +546,11 @@ mod tests {
         assert!(client.is_anchored(&h2));
         assert_eq!(client.total_anchors(), 2);
     }
+
+    #[test]
+    fn test_admin_lookup() {
+        let (env, client) = setup();
+        let admin = client.admin();
+        assert_eq!(admin, Address::generate(&env));
+    }
 }

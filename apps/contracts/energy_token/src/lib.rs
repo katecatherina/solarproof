@@ -491,6 +491,35 @@ mod tests {
     }
 
     #[test]
+    fn test_admin_and_minter_assignment() {
+        let (env, client) = setup();
+        let admin = client.admin();
+        assert_eq!(client.admin(), admin);
+        let minter = Address::generate(&env);
+        client.set_minter(&admin, &minter);
+        // Verify the new minter can be used to mint
+        client.mint(&Address::generate(&env), &500_i128);
+        assert_eq!(client.total_supply(), 500_i128);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_set_minter_requires_admin() {
+        let (env, client) = setup();
+        let non_admin = Address::generate(&env);
+        let new_minter = Address::generate(&env);
+        client.set_minter(&non_admin, &new_minter);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_mint_requires_minter() {
+        let (env, client) = setup();
+        let unauthorized = Address::generate(&env);
+        client.mint(&unauthorized, &100_i128);
+    }
+
+    #[test]
     fn test_transfer() {
         let (env, client) = setup();
         let a = Address::generate(&env);
