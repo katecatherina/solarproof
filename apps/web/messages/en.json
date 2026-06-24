@@ -73,4 +73,10 @@
       }
     }
   }
+  ,
+  "walletGate": {
+    "title": "Wallet required",
+    "description": "Connect your Freighter wallet to access this page.",
+    "connect": "Connect wallet"
+  }
 }
