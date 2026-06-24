@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Search, CheckCircle, XCircle, ExternalLink, Shield } from 'lucide-react'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 interface ChainOfCustody {
   certificate: {
@@ -22,29 +23,33 @@ interface ChainOfCustody {
 export default function VerifyPage() {
   const [query, setQuery] = useState('')
   const [result, setResult] = useState<ChainOfCustody | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [pageError, setPageError] = useState<Error | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
     if (!query.trim()) return
     setLoading(true)
-    setError(null)
+    setPageError(null)
     setResult(null)
     try {
       const res = await fetch(`/api/verify?id=${encodeURIComponent(query.trim())}`)
       const data = await res.json()
-      if (!res.ok) { setError(data.error); return }
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Verification failed')
+      }
       setResult(data)
-    } catch {
-      setError('Network error')
+    } catch (err) {
+      setPageError(err instanceof Error ? err : new Error('Network error'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
+    <ErrorBoundary inline resetKey={query} onReset={() => setPageError(null)}>
+      {pageError && <ThrowError error={pageError} />}
+      <div className="mx-auto max-w-3xl px-4 py-10">
       <div className="mb-8 flex items-center gap-3">
         <Shield className="h-7 w-7 text-yellow-500" />
         <div>
@@ -69,13 +74,6 @@ export default function VerifyPage() {
           {loading ? 'Verifying…' : 'Verify'}
         </button>
       </form>
-
-      {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <XCircle className="h-4 w-4 shrink-0" />
-          {error}
-        </div>
-      )}
 
       {result && (
         <div className="space-y-4">
@@ -141,4 +139,8 @@ function Row({ label, value, mono, link }: { label: string; value: string; mono?
       )}
     </div>
   )
+}
+
+function ThrowError({ error }: { error: Error }) {
+  throw error
 }
