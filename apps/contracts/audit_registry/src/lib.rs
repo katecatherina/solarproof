@@ -270,6 +270,71 @@ impl AuditRegistry {
             .get(&DataKey::Admin)
             .expect("not initialized")
     }
+
+    fn require_admin(env: &Env) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("not initialized");
+        admin.require_auth();
+    }
+
+    /// Extend the TTL for a single persistent bucket entry.
+    ///
+    /// This is admin-only and should be used to keep bucketed anchor storage
+    /// alive on long-lived networks.
+    pub fn extend_bucket_ttl(env: Env, bucket_id: u32, threshold: u32, extend_to: u32) {
+        Self::require_admin(&env);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Bucket(bucket_id), threshold, extend_to);
+    }
+
+    /// Extend the TTL for a single persistent bucket entry with limits.
+    ///
+    /// The extension only happens if it exceeds `min_extension` ledgers and the
+    /// result will not exceed `max_extension` ledgers.
+    pub fn extend_bucket_ttl_with_limits(
+        env: Env,
+        bucket_id: u32,
+        extend_to: u32,
+        min_extension: u32,
+        max_extension: u32,
+    ) {
+        Self::require_admin(&env);
+        env.storage().persistent().extend_ttl_with_limits(
+            &DataKey::Bucket(bucket_id),
+            extend_to,
+            min_extension,
+            max_extension,
+        );
+    }
+
+    /// Extend the TTL of the contract instance and code.
+    ///
+    /// This is admin-only and should be used to keep the contract itself alive
+    /// alongside persistent bucket entries.
+    pub fn extend_contract_ttl(env: Env, threshold: u32, extend_to: u32) {
+        Self::require_admin(&env);
+        env.storage().instance().extend_ttl(threshold, extend_to);
+    }
+
+    /// Extend the TTL of the contract instance and code with limits.
+    ///
+    /// The extension only happens if it exceeds `min_extension` ledgers and the
+    /// result will not exceed `max_extension` ledgers.
+    pub fn extend_contract_ttl_with_limits(
+        env: Env,
+        extend_to: u32,
+        min_extension: u32,
+        max_extension: u32,
+    ) {
+        Self::require_admin(&env);
+        env.storage()
+            .instance()
+            .extend_ttl_with_limits(extend_to, min_extension, max_extension);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -485,6 +550,34 @@ mod tests {
             client.get_version(),
             soroban_sdk::String::from_str(&env, "1.0.0")
         );
+    }
+
+    #[test]
+    fn test_extend_bucket_ttl() {
+        let (env, api_signer, client) = setup();
+        let h = hash(&env);
+        let n = make_nonce(&env, 1);
+        client.anchor(&api_signer, &h, &n).unwrap();
+        let bucket_id = AuditRegistry::get_bucket_id(&h);
+        let before = env
+            .storage()
+            .persistent()
+            .get_ttl(&DataKey::Bucket(bucket_id));
+        client.extend_bucket_ttl(bucket_id, u32::MAX, before + 50);
+        let after = env
+            .storage()
+            .persistent()
+            .get_ttl(&DataKey::Bucket(bucket_id));
+        assert!(after >= before);
+    }
+
+    #[test]
+    fn test_extend_contract_ttl() {
+        let (env, _api_signer, client) = setup();
+        let before = env.storage().instance().get_ttl();
+        client.extend_contract_ttl(u32::MAX, before + 50);
+        let after = env.storage().instance().get_ttl();
+        assert!(after >= before);
     }
 
     #[test]
