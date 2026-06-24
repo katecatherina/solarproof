@@ -88,6 +88,36 @@ Replaces the authorized minter. Requires `admin` auth.
 
 ---
 
+### `pause(env)`
+
+Pauses the contract. When paused, all state-changing operations are blocked.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `env` | `Env` | Contract environment |
+
+Requires `admin` auth.
+
+---
+
+### `unpause(env)`
+
+Unpauses the contract and restores normal operation.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `env` | `Env` | Contract environment |
+
+Requires `admin` auth.
+
+---
+
+### `paused(env) → bool`
+
+Returns `true` if the contract is currently paused.
+
+---
+
 ### `admin(env) → Address`
 
 Returns the admin address.
@@ -116,4 +146,4 @@ Returns `7`.
 | `"amount must be positive"` | `amount ≤ 0` passed to `mint`, `burn`, or `transfer` |
 | `"no balance"` | `burn` called on account with no balance entry |
 | `"insufficient balance"` | `burn` or `transfer` amount exceeds balance |
-| `"not initialized"` | Contract called before `initialize` |
+| `"not initialized"` | Contract called before `initialize` || "contract is paused" | State-changing operation attempted while contract is paused |
