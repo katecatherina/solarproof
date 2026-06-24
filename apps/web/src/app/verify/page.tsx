@@ -103,7 +103,7 @@ export default function VerifyPage() {
   const searchParams = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('id') ?? '')
   const [result, setResult] = useState<ChainOfCustody | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [pageError, setPageError] = useState<Error | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const { pushToast: toast } = useToast()
@@ -113,7 +113,7 @@ export default function VerifyPage() {
     const q = query.trim()
     if (!q) return
     setLoading(true)
-    setError(null)
+    setPageError(null)
     setResult(null)
     router.replace(`/verify?id=${encodeURIComponent(q)}`)
     try {
@@ -380,4 +380,8 @@ function Row({
       </dd>
     </div>
   )
+}
+
+function ThrowError({ error }: { error: Error }) {
+  throw error
 }
