@@ -133,6 +133,62 @@ Returns the admin address.
 
 ---
 
+### `extend_bucket_ttl(env, bucket_id, threshold, extend_to)`
+
+Extend the TTL for a persistent bucket entry when its current TTL is below `threshold`.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `bucket_id` | `u32` | Bucket index for anchor storage (0-1023) |
+| `threshold` | `u32` | Only extend if current TTL is below this value |
+| `extend_to` | `u32` | New TTL in ledgers if extension is applied |
+
+Requires admin authorization.
+
+---
+
+### `extend_bucket_ttl_with_limits(env, bucket_id, extend_to, min_extension, max_extension)`
+
+Extend the TTL for a persistent bucket entry with extension limits.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `bucket_id` | `u32` | Bucket index for anchor storage (0-1023) |
+| `extend_to` | `u32` | Requested TTL in ledgers |
+| `min_extension` | `u32` | Minimum extension required to apply the update |
+| `max_extension` | `u32` | Maximum allowed extension |
+
+Requires admin authorization.
+
+---
+
+### `extend_contract_ttl(env, threshold, extend_to)`
+
+Extend the TTL of the contract instance and code when the current TTL is below `threshold`.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `threshold` | `u32` | Only extend if current TTL is below this value |
+| `extend_to` | `u32` | New TTL in ledgers if extension is applied |
+
+Requires admin authorization.
+
+---
+
+### `extend_contract_ttl_with_limits(env, extend_to, min_extension, max_extension)`
+
+Extend the TTL of the contract instance and code with extension limits.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `extend_to` | `u32` | Requested TTL in ledgers |
+| `min_extension` | `u32` | Minimum extension required to apply the update |
+| `max_extension` | `u32` | Maximum allowed extension |
+
+Requires admin authorization.
+
+---
+
 ## Error Codes
 
 | Panic message | Cause |
