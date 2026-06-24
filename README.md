@@ -195,7 +195,7 @@ solarproof/
 |---|---|---|
 | 1 | Signed meter readings + on-chain anchoring | ✅ Current |
 | 2 | Hardware HSM integration (YubiKey / TPM) | ✅ Completed |
-| 3 | I-REC / Energy Web / TIGR bridge | 🔜 Next |
+| 3 | I-REC / Energy Web / TIGR bridge (#609) | 🔮 Future |
 
 ---
 
