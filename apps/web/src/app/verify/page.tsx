@@ -2,45 +2,16 @@
 
 import { useState } from 'react'
 import { Search, CheckCircle, XCircle, ExternalLink, Shield } from 'lucide-react'
-
-interface ChainOfCustody {
-  certificate: {
-    id: string; kwh: number; issued_at: string
-    retired: boolean; retired_at: string | null; retired_by: string | null
-  }
-  on_chain: {
-    anchor_tx: string; anchor_explorer: string
-    mint_tx: string; mint_explorer: string
-  }
-  meter_proof: {
-    meter_id: string; reading_hash: string
-    signature_hex: string; kwh: number
-    timestamp: string; verified: boolean
-  } | null
-}
+import { ChainOfCustody, useVerifyCertificate } from '@/lib/queries'
 
 export default function VerifyPage() {
   const [query, setQuery] = useState('')
-  const [result, setResult] = useState<ChainOfCustody | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const verify = useVerifyCertificate()
 
-  async function handleVerify(e: React.FormEvent) {
+  function handleVerify(e: React.FormEvent) {
     e.preventDefault()
     if (!query.trim()) return
-    setLoading(true)
-    setError(null)
-    setResult(null)
-    try {
-      const res = await fetch(`/api/verify?id=${encodeURIComponent(query.trim())}`)
-      const data = await res.json()
-      if (!res.ok) { setError(data.error); return }
-      setResult(data)
-    } catch {
-      setError('Network error')
-    } finally {
-      setLoading(false)
-    }
+    verify.mutate(query.trim())
   }
 
   return (
@@ -70,14 +41,14 @@ export default function VerifyPage() {
         </button>
       </form>
 
-      {error && (
+      {verify.isError && (
         <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <XCircle className="h-4 w-4 shrink-0" />
-          {error}
+          {verify.error?.message}
         </div>
       )}
 
-      {result && (
+      {verify.data && (
         <div className="space-y-4">
           {/* Status */}
           <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-4">
@@ -89,26 +60,26 @@ export default function VerifyPage() {
 
           {/* Certificate */}
           <Section title="Certificate">
-            <Row label="ID" value={result.certificate.id} mono />
-            <Row label="Energy" value={`${result.certificate.kwh} kWh`} />
-            <Row label="Issued" value={new Date(result.certificate.issued_at).toLocaleString()} />
-            <Row label="Status" value={result.certificate.retired ? `Retired ${result.certificate.retired_at ? new Date(result.certificate.retired_at).toLocaleDateString() : ''}` : 'Active'} />
+            <Row label="ID" value={verify.data.certificate.id} mono />
+            <Row label="Energy" value={`${verify.data.certificate.kwh} kWh`} />
+            <Row label="Issued" value={new Date(verify.data.certificate.issued_at).toLocaleString()} />
+            <Row label="Status" value={verify.data.certificate.retired ? `Retired ${verify.data.certificate.retired_at ? new Date(verify.data.certificate.retired_at).toLocaleDateString() : ''}` : 'Active'} />
           </Section>
 
           {/* On-chain proof */}
           <Section title="On-chain proof">
-            <Row label="Anchor tx" value={result.on_chain.anchor_tx} mono link={result.on_chain.anchor_explorer} />
-            <Row label="Mint tx" value={result.on_chain.mint_tx} mono link={result.on_chain.mint_explorer} />
+            <Row label="Anchor tx" value={verify.data.on_chain.anchor_tx} mono link={verify.data.on_chain.anchor_explorer} />
+            <Row label="Mint tx" value={verify.data.on_chain.mint_tx} mono link={verify.data.on_chain.mint_explorer} />
           </Section>
 
           {/* Meter proof */}
-          {result.meter_proof && (
+          {verify.data.meter_proof && (
             <Section title="Meter proof">
-              <Row label="Meter ID" value={result.meter_proof.meter_id} mono />
-              <Row label="Reading hash" value={result.meter_proof.reading_hash.slice(0, 16) + '…'} mono />
-              <Row label="Signature" value={result.meter_proof.signature_hex.slice(0, 16) + '…'} mono />
-              <Row label="kWh" value={String(result.meter_proof.kwh)} />
-              <Row label="Timestamp" value={new Date(result.meter_proof.timestamp).toLocaleString()} />
+              <Row label="Meter ID" value={verify.data.meter_proof.meter_id} mono />
+              <Row label="Reading hash" value={verify.data.meter_proof.reading_hash.slice(0, 16) + '…'} mono />
+              <Row label="Signature" value={verify.data.meter_proof.signature_hex.slice(0, 16) + '…'} mono />
+              <Row label="kWh" value={String(verify.data.meter_proof.kwh)} />
+              <Row label="Timestamp" value={new Date(verify.data.meter_proof.timestamp).toLocaleString()} />
               <Row label="Ed25519 verified" value="✓ Valid" />
             </Section>
           )}
