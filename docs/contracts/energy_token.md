@@ -101,6 +101,36 @@ Replaces the authorized minter. Requires `admin` auth.
 
 ---
 
+### `pause(env)`
+
+Pauses the contract. When paused, all state-changing operations are blocked.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `env` | `Env` | Contract environment |
+
+Requires `admin` auth.
+
+---
+
+### `unpause(env)`
+
+Unpauses the contract and restores normal operation.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `env` | `Env` | Contract environment |
+
+Requires `admin` auth.
+
+---
+
+### `paused(env) → bool`
+
+Returns `true` if the contract is currently paused.
+
+---
+
 ### `admin(env) → Address`
 
 Returns the admin address.

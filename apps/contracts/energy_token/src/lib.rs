@@ -824,7 +824,56 @@ mod tests {
         assert_eq!(client.balance(&user), 1_i128);
     }
 
-    // admin
+    // pause/unpause
+
+    #[test]
+    #[should_panic(expected = "contract is paused")]
+    fn test_pause_blocks_mint() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let user = Address::generate(&env);
+        client.initialize(&admin, &minter);
+        client.pause();
+        client.mint(&user, &100_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "contract is paused")]
+    fn test_pause_blocks_transfer() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let owner = Address::generate(&env);
+        let recipient = Address::generate(&env);
+        client.initialize(&admin, &minter);
+        client.mint(&owner, &100_i128);
+        client.pause();
+        client.transfer(&owner, &recipient, &10_i128);
+    }
+
+    #[test]
+    fn test_unpause_allows_operations_again() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let user = Address::generate(&env);
+        client.initialize(&admin, &minter);
+        client.pause();
+        client.unpause();
+        assert!(!client.paused());
+        client.mint(&user, &100_i128);
+        assert_eq!(client.balance(&user), 100_i128);
+    }
 
     #[test]
     fn test_admin_returns_correct_address() {
