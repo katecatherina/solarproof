@@ -222,6 +222,18 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (readingErr || !reading) {
+    if (isAlreadyAnchoredError(readingErr)) {
+      const { data: existing } = await db
+        .from('readings')
+        .select('id')
+        .eq('reading_hash', readingHash.toString('hex'))
+        .single()
+
+      return NextResponse.json(
+        { error: 'Reading already anchored', reading_id: existing?.id },
+        { status: 409 }
+      )
+    }
     log.error('readings.post.db_insert_failed', { meter_id, error: readingErr?.message })
     return NextResponse.json({ error: 'Failed to save reading' }, { status: 500 })
   }
