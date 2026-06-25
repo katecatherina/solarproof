@@ -182,7 +182,7 @@ Returns `7`.
 ---
 
 ## Events
-
+These events are emitted to the Soroban ledger as transaction log entries and can be consumed by indexers or frontend services. Consumers should filter on the event topic to track token lifecycle activity.
 | Topic | Data | Emitted by |
 |---|---|---|
 | `"mint"` | `(to: Address, amount: i128)` | `mint` |

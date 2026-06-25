@@ -3,6 +3,15 @@
 This document describes the public interfaces for SolarProof's three Soroban contracts.
 It includes function signatures, parameters, return values, error conditions, event names, and example Stellar CLI invocations.
 
+## Event emission and consumption
+Soroban contracts publish structured events via `env.events().publish(...)`. These events are attached to ledger entries and can be consumed by indexers, wallet UIs, verifier services, and off-chain analytics.
+
+- Event topics are used to filter relevant actions across contracts.
+- Consumers should subscribe to the Soroban event stream or query ledger history through Stellar/Soroban RPC.
+- Event payloads are published in transaction logs, not as function return values.
+
+Each contract below documents the topics it emits and the corresponding event data.
+
 ## energy_token
 
 ### Description
