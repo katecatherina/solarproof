@@ -816,3 +816,6 @@ mod tests {
         client.retire(&user, &String::from_str(&env, "empty"));
     }
 }
+
+#[cfg(test)]
+mod overflow_tests;
