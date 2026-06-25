@@ -1,3 +1,9 @@
+## [1.18.2](https://github.com/AnnabelJoe/solarproof/compare/v1.18.1...v1.18.2) (2026-06-25)
+
+### Bug Fixes
+
+* **api:** return 409 on duplicate reading insert (handle duplicate-anchor fallback)\n\nCloses [#557](https://github.com/AnnabelJoe/solarproof/issues/557) ([51c9ed9](https://github.com/AnnabelJoe/solarproof/commit/51c9ed9914923dfcb0445d1ab1dca14f2d619ef5))
+
 ## [1.18.1](https://github.com/AnnabelJoe/solarproof/compare/v1.18.0...v1.18.1) (2026-06-25)
 
 ### Bug Fixes
