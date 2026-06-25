@@ -1,3 +1,19 @@
+## [1.17.0](https://github.com/AnnabelJoe/solarproof/compare/v1.16.0...v1.17.0) (2026-06-25)
+
+### Features
+
+* **fuzz:** add governance lifecycle fuzz target ([#558](https://github.com/AnnabelJoe/solarproof/issues/558)) ([f1b1301](https://github.com/AnnabelJoe/solarproof/commit/f1b1301a287e1bde7088426e23c3664f1e6f9e62))
+
+### Performance
+
+* **audit_registry:** store only ledger seq in anchor entries ([#552](https://github.com/AnnabelJoe/solarproof/issues/552)) ([62eaf70](https://github.com/AnnabelJoe/solarproof/commit/62eaf70db2b6a53af90cdee070d501d83d492e1b))
+
+### Documentation
+
+* add color contrast audit plan ([#533](https://github.com/AnnabelJoe/solarproof/issues/533)) ([f18bff1](https://github.com/AnnabelJoe/solarproof/commit/f18bff1be5b1bd3410ede96a3cfd8c0a83799a7c))
+* add secrets & key rotation procedures ([#527](https://github.com/AnnabelJoe/solarproof/issues/527)) ([ba94678](https://github.com/AnnabelJoe/solarproof/commit/ba946781daff8a6a4f17c18abfe7c642eef6ebcf))
+* **audits:** remove stale placeholders from audit README ([f940140](https://github.com/AnnabelJoe/solarproof/commit/f9401409915742b8801d019ba8c062a836920420))
+
 ## [1.16.0](https://github.com/AnnabelJoe/solarproof/compare/v1.15.0...v1.16.0) (2026-06-08)
 
 ### Features
