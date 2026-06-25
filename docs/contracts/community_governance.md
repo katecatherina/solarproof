@@ -2,6 +2,8 @@
 
 Cooperative on-chain governance — token holders submit proposals and vote. A proposal passes when `yes_votes / total_votes ≥ quorum%` after the voting period ends.
 
+For best practices on configuring these parameters, see the [Governance Parameter Tuning Guide](../governance_tuning_guide.md).
+
 - **SDK:** Soroban SDK 23.1.0 / OpenZeppelin Stellar v0.5.1
 
 ---
@@ -62,6 +64,28 @@ Emits event: `("propose", proposal_id)`
 **Example:**
 ```bash
 stellar contract invoke --id <CONTRACT_ID> -- propose \
+  --proposer GABC...XYZ \
+  --title "Add batch anchor support" \
+  --description "Allow anchoring multiple readings in one transaction"
+```
+
+## Debugging with tracer-sim
+
+Simulate governance calls without submitting a network transaction.
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no -- propose \
+  --proposer GABC...XYZ \
+  --title "Add batch anchor support" \
+  --description "Allow anchoring multiple readings in one transaction"
+```
+
+To estimate the gas and contract resource usage for a proposal or vote:
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no --cost -- propose \
   --proposer GABC...XYZ \
   --title "Add batch anchor support" \
   --description "Allow anchoring multiple readings in one transaction"
