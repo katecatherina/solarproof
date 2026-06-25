@@ -1,3 +1,156 @@
+## [1.18.1](https://github.com/AnnabelJoe/solarproof/compare/v1.18.0...v1.18.1) (2026-06-25)
+
+### Bug Fixes
+
+* **a11y:** improve toast ARIA semantics and dismiss labels\n\nCloses [#537](https://github.com/AnnabelJoe/solarproof/issues/537) ([ff8701d](https://github.com/AnnabelJoe/solarproof/commit/ff8701d1abd3afb60bc7fa8a801f672f4a577ee0))
+
+### Documentation
+
+* **adr:** add contract upgradeability/migration ADR\n\nCloses [#555](https://github.com/AnnabelJoe/solarproof/issues/555) ([2e9b4dd](https://github.com/AnnabelJoe/solarproof/commit/2e9b4dd37ffe64eef069c9d31cd0dac4a005722b))
+
+## [1.18.0](https://github.com/AnnabelJoe/solarproof/compare/v1.17.0...v1.18.0) (2026-06-25)
+
+### Features
+
+* **security:** add IP rate limiting for public endpoints ([#528](https://github.com/AnnabelJoe/solarproof/issues/528)) ([bce053a](https://github.com/AnnabelJoe/solarproof/commit/bce053a4bb7dc7940af2a81328ae293e9d3dd5cc))
+
+### Documentation
+
+* add accessibility and localization contribution guide ([#588](https://github.com/AnnabelJoe/solarproof/issues/588)) ([df82209](https://github.com/AnnabelJoe/solarproof/commit/df822095ea40fc78bbecedb08d852f250df8165f))
+* add production threat model review ([#601](https://github.com/AnnabelJoe/solarproof/issues/601)) ([c2ba58e](https://github.com/AnnabelJoe/solarproof/commit/c2ba58edc6f3a0462506879e19bad33cd14c7ddd))
+* **backlog:** add certificate retirement reporting backlog\n\nCloses [#612](https://github.com/AnnabelJoe/solarproof/issues/612) ([8dcad69](https://github.com/AnnabelJoe/solarproof/commit/8dcad69daf7fba4c4953cdf1be14f6df6014f82f))
+
+## [1.17.0](https://github.com/AnnabelJoe/solarproof/compare/v1.16.0...v1.17.0) (2026-06-25)
+
+### Features
+
+* **fuzz:** add governance lifecycle fuzz target ([#558](https://github.com/AnnabelJoe/solarproof/issues/558)) ([f1b1301](https://github.com/AnnabelJoe/solarproof/commit/f1b1301a287e1bde7088426e23c3664f1e6f9e62))
+
+### Performance
+
+* **audit_registry:** store only ledger seq in anchor entries ([#552](https://github.com/AnnabelJoe/solarproof/issues/552)) ([62eaf70](https://github.com/AnnabelJoe/solarproof/commit/62eaf70db2b6a53af90cdee070d501d83d492e1b))
+
+### Documentation
+
+* add color contrast audit plan ([#533](https://github.com/AnnabelJoe/solarproof/issues/533)) ([f18bff1](https://github.com/AnnabelJoe/solarproof/commit/f18bff1be5b1bd3410ede96a3cfd8c0a83799a7c))
+* add secrets & key rotation procedures ([#527](https://github.com/AnnabelJoe/solarproof/issues/527)) ([ba94678](https://github.com/AnnabelJoe/solarproof/commit/ba946781daff8a6a4f17c18abfe7c642eef6ebcf))
+* **audits:** remove stale placeholders from audit README ([f940140](https://github.com/AnnabelJoe/solarproof/commit/f9401409915742b8801d019ba8c062a836920420))
+
+## [1.16.0](https://github.com/AnnabelJoe/solarproof/compare/v1.15.0...v1.16.0) (2026-06-08)
+
+### Features
+
+* add bulk certificate retirement API and UI ([#347](https://github.com/AnnabelJoe/solarproof/issues/347)) ([196ab0c](https://github.com/AnnabelJoe/solarproof/commit/196ab0c3a675541dfac50461c60a1f780a6f46bd))
+* add GET/DELETE /api/meters/:id with admin auth ([#269](https://github.com/AnnabelJoe/solarproof/issues/269)) ([444a447](https://github.com/AnnabelJoe/solarproof/commit/444a44792cb94cf220bdb7fdb323d3139feb6c07))
+* add input validation and sanitization to all API endpoints ([#338](https://github.com/AnnabelJoe/solarproof/issues/338)) ([964d4b8](https://github.com/AnnabelJoe/solarproof/commit/964d4b8dba01bd170da4382536d7d02b31cd2ddf))
+* add loading skeletons for async data fetches ([#255](https://github.com/AnnabelJoe/solarproof/issues/255)) ([3fc2fcd](https://github.com/AnnabelJoe/solarproof/commit/3fc2fcd77fe394a36e7d8e511a9ff89b6916ca45))
+* add pentest scope and report placeholder ([#342](https://github.com/AnnabelJoe/solarproof/issues/342)) ([d27703e](https://github.com/AnnabelJoe/solarproof/commit/d27703e556fc831cef8ff1a4a5965c3b9fc3edbf))
+* add public v1 verify API and OpenAPI spec ([#352](https://github.com/AnnabelJoe/solarproof/issues/352)) ([71dc4a9](https://github.com/AnnabelJoe/solarproof/commit/71dc4a92b967e16fc8ac26db20bef9cceeb3dfe5))
+* admin interface and fractional kWh support ([49bd5fe](https://github.com/AnnabelJoe/solarproof/commit/49bd5fe072321b97d023a14593ac336e3c3f7c47))
+* **api:** versioning — 301 redirects from /api/* to /api/v1/*, API-Version header ([fa8bf84](https://github.com/AnnabelJoe/solarproof/commit/fa8bf845ccec78148e8573448433545fe4e1ac70))
+* **auth:** configure token expiry, rotation, and revocation list ([d4117a7](https://github.com/AnnabelJoe/solarproof/commit/d4117a722c20e1bad3056e64550eae6733add378))
+* build analytics dashboard for energy generation statistics ([#350](https://github.com/AnnabelJoe/solarproof/issues/350)) ([971c19c](https://github.com/AnnabelJoe/solarproof/commit/971c19cbeeddbcf80d4d78c5715af8e8db152755))
+* certificate transfer endpoint and UI ([#1](https://github.com/AnnabelJoe/solarproof/issues/1)) ([477a577](https://github.com/AnnabelJoe/solarproof/commit/477a57774ccd47ce8723c9f074cc661339fba231))
+* **ci:** Docker image scanning with Trivy — block on CRITICAL CVEs ([164dbc7](https://github.com/AnnabelJoe/solarproof/commit/164dbc70dec679f40cf36f982e87e9c1305e65b5))
+* **contracts:** add upgrade timelock tests for community_governance ([#284](https://github.com/AnnabelJoe/solarproof/issues/284)) ([79f5662](https://github.com/AnnabelJoe/solarproof/commit/79f5662db2c6ec52f23de11c850d9d4b6fff2bf2))
+* **crypto:** add verifyReadingSignature and 100% unit test coverage ([2b79205](https://github.com/AnnabelJoe/solarproof/commit/2b79205294fd28787e750d7fd56fc113de82fb75))
+* **db:** add perf indexes on readings, certificates, audit_anchors ([7e37584](https://github.com/AnnabelJoe/solarproof/commit/7e37584eca7cf99cec3c7b6c864e591b5365dfd2))
+* **e2e:** add Playwright tests for dashboard, certificate detail, and public verifier ([1ecf24e](https://github.com/AnnabelJoe/solarproof/commit/1ecf24efbb7a66b7470ea634dfc68066f88f3d80))
+* enable Turborepo remote caching for all CI steps ([#297](https://github.com/AnnabelJoe/solarproof/issues/297)) ([9385ff4](https://github.com/AnnabelJoe/solarproof/commit/9385ff4964ff0ec1a516b56a574f7f7eecab3672))
+* **governance:** add proposed_action field to create proposal form ([515ed8d](https://github.com/AnnabelJoe/solarproof/commit/515ed8d39e808d963a669e6a3d7875d51aff9a15))
+* **governance:** configurable quorum/threshold with admin guard and edge-case tests ([ecda905](https://github.com/AnnabelJoe/solarproof/commit/ecda90541af1c67555fb8feee71cf181f06d0e96))
+* I-REC XML export for certificates ([#4](https://github.com/AnnabelJoe/solarproof/issues/4)) ([232bf4a](https://github.com/AnnabelJoe/solarproof/commit/232bf4af3bfe49c54be036bca9a669dc5a2b42f9))
+* implement BullMQ+Redis async job queue for Stellar tx ([#272](https://github.com/AnnabelJoe/solarproof/issues/272)) ([a4b425c](https://github.com/AnnabelJoe/solarproof/commit/a4b425c8485bc73366d6e2810aabd103742fe6b0))
+* implement certificate retirement API endpoint ([#270](https://github.com/AnnabelJoe/solarproof/issues/270)) ([861bcce](https://github.com/AnnabelJoe/solarproof/commit/861bcceaefeba03e24f082ba492fa0f1b93842e2))
+* implement cooperative multi-meter management ([#351](https://github.com/AnnabelJoe/solarproof/issues/351)) ([640d0b9](https://github.com/AnnabelJoe/solarproof/commit/640d0b9c7bb914decb6effa0523eaf891d77d1c0))
+* implement meter key revocation mechanism ([#339](https://github.com/AnnabelJoe/solarproof/issues/339)) ([ce90af9](https://github.com/AnnabelJoe/solarproof/commit/ce90af9f4fe98eae5ab2897d8d4eaac96d04a3a3))
+* implement webhook notifications for certificate lifecycle events ([#353](https://github.com/AnnabelJoe/solarproof/issues/353)) ([4205191](https://github.com/AnnabelJoe/solarproof/commit/4205191c40472d8372dfaddbc5ae6ff1b55799f6))
+* **load-test:** add k6 baseline + breakpoint scenarios, p95<500ms threshold ([f019ccc](https://github.com/AnnabelJoe/solarproof/commit/f019ccc6fe728ab1a4e24441a77f2d971fdadbaf))
+* mock Freighter wallet for CI testing ([#2](https://github.com/AnnabelJoe/solarproof/issues/2)) ([325b565](https://github.com/AnnabelJoe/solarproof/commit/325b565365015d249bf9ef7afb086e7c5b4cbd15))
+* **notifications:** email alerts for mint, retire, and mint failure ([#140](https://github.com/AnnabelJoe/solarproof/issues/140)) ([7ce4a12](https://github.com/AnnabelJoe/solarproof/commit/7ce4a12ca159502c04a1332c68073840a417214d))
+* **security:** add HTTP security headers ([#129](https://github.com/AnnabelJoe/solarproof/issues/129)) ([944c5b9](https://github.com/AnnabelJoe/solarproof/commit/944c5b9b2ef842cbaf9aee7e5c72112406fecc80))
+* **security:** add RLS policies for multi-tenant isolation ([#274](https://github.com/AnnabelJoe/solarproof/issues/274)) ([9b2ce49](https://github.com/AnnabelJoe/solarproof/commit/9b2ce4974322501587534e1ca73a03c446fba611))
+* **security:** API key auth for meter submissions ([#131](https://github.com/AnnabelJoe/solarproof/issues/131)) ([a437a9b](https://github.com/AnnabelJoe/solarproof/commit/a437a9b50c64d760f0e3f4f412020ac8bea2b98a))
+* **security:** HTTPS redirect and HSTS headers ([45c9c81](https://github.com/AnnabelJoe/solarproof/commit/45c9c81f6d8b16f588506c81a9fb644080ffbbb0))
+* **security:** restrict Supabase service role key usage ([#134](https://github.com/AnnabelJoe/solarproof/issues/134)) ([037e825](https://github.com/AnnabelJoe/solarproof/commit/037e825c30f95f718c7232c83ed477361ccd2514))
+* staging environment deployment pipeline ([#295](https://github.com/AnnabelJoe/solarproof/issues/295)) ([8169df0](https://github.com/AnnabelJoe/solarproof/commit/8169df0f18540653ad0df9e852651429be0ffdc3))
+* support fractional kWh tokens with 3 decimal places ([84ee9a6](https://github.com/AnnabelJoe/solarproof/commit/84ee9a679321807dadbf1978d0fea8daacba6d52)), closes [#354](https://github.com/AnnabelJoe/solarproof/issues/354)
+* **testing:** add mutation testing for Rust contracts and TS utilities ([#331](https://github.com/AnnabelJoe/solarproof/issues/331)) ([29135d5](https://github.com/AnnabelJoe/solarproof/commit/29135d5c4f6bd4242033247e0654633b7363fbf5))
+* **web:** real-time energy chart with WebSocket + polling fallback ([#260](https://github.com/AnnabelJoe/solarproof/issues/260)) ([7881a7e](https://github.com/AnnabelJoe/solarproof/commit/7881a7e9c2d0152f016e3849da267ed755012675))
+
+### Bug Fixes
+
+* **ci:** add dependency license compliance check ([#344](https://github.com/AnnabelJoe/solarproof/issues/344)) ([ab4b39e](https://github.com/AnnabelJoe/solarproof/commit/ab4b39ecfde5bf3fb8c83275d34815ac33cd9d6c))
+* resolve conflicts, reconcile retirement model, and fix tests ([a0d4332](https://github.com/AnnabelJoe/solarproof/commit/a0d433258d10c0f211fac71259195c59794a149b))
+* resolve JSX parse errors in dashboard and verify pages ([a1ec4b7](https://github.com/AnnabelJoe/solarproof/commit/a1ec4b7dbaa346a8ebe51ec676ffd7b44e7c6ee1))
+* resolve residual merge conflict markers ([1c8b371](https://github.com/AnnabelJoe/solarproof/commit/1c8b3713cb0c0d5a09e216dc4227992e66a27adc))
+* resolve workspace compilation and type errors ([042221a](https://github.com/AnnabelJoe/solarproof/commit/042221a47a88fe0170e35fd997cae68147cfde05))
+* **security:** add security headers to all HTTP responses ([#340](https://github.com/AnnabelJoe/solarproof/issues/340)) ([1d6db6b](https://github.com/AnnabelJoe/solarproof/commit/1d6db6bd231763639c0ae70f928d4d1b6b05689f))
+* **security:** implement audit logging for sensitive operations ([#341](https://github.com/AnnabelJoe/solarproof/issues/341)) ([34d0971](https://github.com/AnnabelJoe/solarproof/commit/34d0971493ac84447c1458c6b7b8c879deb49395))
+* **security:** implement CSP headers for Next.js web app ([#333](https://github.com/AnnabelJoe/solarproof/issues/333)) ([2834203](https://github.com/AnnabelJoe/solarproof/commit/2834203f2d74e2290f4379f571703bd9a4865a56))
+
+### Documentation
+
+* add hardware meter integration guide ([#320](https://github.com/AnnabelJoe/solarproof/issues/320)) ([f5c4b3e](https://github.com/AnnabelJoe/solarproof/commit/f5c4b3e65b66aba52bcce5e02c762703e8c3feda))
+* add inline comments and required/optional markers to .env.example ([#318](https://github.com/AnnabelJoe/solarproof/issues/318)) ([92ea4da](https://github.com/AnnabelJoe/solarproof/commit/92ea4dae037a207e709fdff7e98952bc5b7f8b4a))
+* add mainnet deployment process and checklist to deployments.md ([#285](https://github.com/AnnabelJoe/solarproof/issues/285)) ([c08ad58](https://github.com/AnnabelJoe/solarproof/commit/c08ad582167ae9a3e5eb7dcf72b630602340a3fe))
+* add operational runbooks ([#315](https://github.com/AnnabelJoe/solarproof/issues/315)) ([2638a9f](https://github.com/AnnabelJoe/solarproof/commit/2638a9f73d6ef1036a34961819d35a8c52e4e428))
+* add OWASP Top 10 security review and remediate misconfiguration ([#334](https://github.com/AnnabelJoe/solarproof/issues/334)) ([092e901](https://github.com/AnnabelJoe/solarproof/commit/092e90112e9b667815cfa4d4aa8e7f7ec6d00d12))
+* add SECRETS.md — centralized secrets management guide ([#289](https://github.com/AnnabelJoe/solarproof/issues/289)) ([90eed76](https://github.com/AnnabelJoe/solarproof/commit/90eed7640a9b6cf64f92c374a64177f7cfa3cf4f))
+* add Stellar mainnet deployment checklist and go-live plan ([120d730](https://github.com/AnnabelJoe/solarproof/commit/120d730f20ffa8fdadb99cbd739bfee2af95351e)), closes [#142](https://github.com/AnnabelJoe/solarproof/issues/142)
+* add user guide for web dashboard (closes [#317](https://github.com/AnnabelJoe/solarproof/issues/317)) ([eb1a425](https://github.com/AnnabelJoe/solarproof/commit/eb1a425bc37ae9428dd0ac9a082f1d666bc51912))
+* **audit:** add security audit engagement tracking and remediation policy ([bca11a2](https://github.com/AnnabelJoe/solarproof/commit/bca11a2b50315a0bb3a78a92d90926f601446a79))
+* **contracts:** add/enhance Rust doc comments on all public functions ([#319](https://github.com/AnnabelJoe/solarproof/issues/319)) ([18c472a](https://github.com/AnnabelJoe/solarproof/commit/18c472abc6bee773e297e15398e8e00588f78331))
+* create SECURITY.md with vulnerability disclosure policy ([#314](https://github.com/AnnabelJoe/solarproof/issues/314)) ([7698660](https://github.com/AnnabelJoe/solarproof/commit/7698660b032ca9a345cee0f37e46122e6b243ab3))
+* **performance:** ensure load test baseline + breaking point documentation ([9a0056a](https://github.com/AnnabelJoe/solarproof/commit/9a0056a8815b9370e1f29e19d203a78ee20e36bb))
+* standardize CHANGELOG.md and update PR template [#312](https://github.com/AnnabelJoe/solarproof/issues/312) ([8281f08](https://github.com/AnnabelJoe/solarproof/commit/8281f0867d5d420b5b501b80d74d07326f8e14bd))
+
+## [1.15.0](https://github.com/AnnabelJoe/solarproof/compare/v1.14.0...v1.15.0) (2026-05-30)
+
+### Features
+
+* **contracts:** optimize Soroban storage for audit-registry ([f9055f7](https://github.com/AnnabelJoe/solarproof/commit/f9055f7bd652a4fedd4ca454386452bbe0d8d779)), closes [#281](https://github.com/AnnabelJoe/solarproof/issues/281)
+
+## [1.14.0](https://github.com/AnnabelJoe/solarproof/compare/v1.13.0...v1.14.0) (2026-05-30)
+
+### Features
+
+* **contracts:** optimize Soroban storage for audit-registry ([4def0e7](https://github.com/AnnabelJoe/solarproof/commit/4def0e722cfe10ae0d5daeb4965ea2597f8ca836)), closes [#281](https://github.com/AnnabelJoe/solarproof/issues/281)
+
+### Documentation
+
+* **docs:** write governance parameter tuning guide ([cd9a68c](https://github.com/AnnabelJoe/solarproof/commit/cd9a68c28eeede3309d23000487f682ec12d40c6)), closes [#279](https://github.com/AnnabelJoe/solarproof/issues/279)
+
+## [1.13.0](https://github.com/AnnabelJoe/solarproof/compare/v1.12.0...v1.13.0) (2026-05-30)
+
+### Features
+
+* implement rate limiting on /api/readings [#266](https://github.com/AnnabelJoe/solarproof/issues/266) ([b9e0b98](https://github.com/AnnabelJoe/solarproof/commit/b9e0b9888dcc2d54bc6ff89507d80bcd58d525a5))
+
+## [1.12.0](https://github.com/AnnabelJoe/solarproof/compare/v1.11.0...v1.12.0) (2026-05-30)
+
+### Features
+
+* add dark mode toggle to settings and enhance theme support [#253](https://github.com/AnnabelJoe/solarproof/issues/253) ([249dd4f](https://github.com/AnnabelJoe/solarproof/commit/249dd4fafc5a3540ab2b0d55c10cb7705b1e7e66))
+
+## [1.11.0](https://github.com/AnnabelJoe/solarproof/compare/v1.10.0...v1.11.0) (2026-05-30)
+
+### Features
+
+* implement global and section error boundaries [#256](https://github.com/AnnabelJoe/solarproof/issues/256) ([cc85f83](https://github.com/AnnabelJoe/solarproof/commit/cc85f83d86c9d83d90106b981a03aa07508868d1))
+
+## [1.10.0](https://github.com/AnnabelJoe/solarproof/compare/v1.9.0...v1.10.0) (2026-05-30)
+
+### Features
+
+* add pagination and filtering to certificates [#258](https://github.com/AnnabelJoe/solarproof/issues/258) ([4d2bde0](https://github.com/AnnabelJoe/solarproof/commit/4d2bde06d7e6cf59102504433c0c59a8bc6fc5d1))
+
+## [1.9.0](https://github.com/AnnabelJoe/solarproof/compare/v1.8.2...v1.9.0) (2026-05-29)
+
+### Features
+
+* configure log aggregation and retention ([#299](https://github.com/AnnabelJoe/solarproof/issues/299)) ([3ee0154](https://github.com/AnnabelJoe/solarproof/commit/3ee0154492cccc7ce78c61925c0b72c44120fdf4))
+
 ## [1.8.2](https://github.com/AnnabelJoe/solarproof/compare/v1.8.1...v1.8.2) (2026-05-29)
 
 ### Bug Fixes
@@ -198,14 +351,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(contracts): implement certificate retirement in energy_token (4a22103)
+- feat(contracts): optimize Soroban storage for audit-registry (f9055f7)
 - STRIDE-based threat model (`docs/THREAT_MODEL.md`) covering 13 attack vectors across all 6 STRIDE categories (#110)
 - TSDoc comments and inline explanations on all exported functions in `packages/stellar/src/index.ts`, `apps/web/src/lib/stellar.ts`, and `apps/web/src/lib/crypto.ts` (#103)
 - Vitest unit tests for `buildTransaction`, `anchorReading` (build_anchor_tx), `mintCertificates` (build_mint_tx), and `retireCertificate` (build_retire_tx) with mocked Stellar RPC (#118)
 
----
+## [1.9.0] - 2026-05-29
+### Added
+- configure log aggregation and retention ([#299](https://github.com/AnnabelJoe/solarproof/issues/299))
 
-## [1.0.0] — 2026-04-21
+## [1.8.2] - 2026-05-29
+### Fixed
+- use checked arithmetic in energy_token to prevent overflow ([#277](https://github.com/AnnabelJoe/solarproof/issues/277))
 
+## [1.8.1] - 2026-05-29
+### Fixed
+- add replay attack protection to audit_registry contract ([#280](https://github.com/AnnabelJoe/solarproof/issues/280))
+
+## [1.8.0] - 2026-05-29
+### Added
+- automate Stellar Testnet faucet funding in CI ([#303](https://github.com/AnnabelJoe/solarproof/issues/303))
+- **adr:** add ADR-005 monorepo structure and ADR-006 certificate retirement model ([#311](https://github.com/AnnabelJoe/solarproof/issues/311))
+
+## [1.7.1] - 2026-05-29
+### Fixed
+- implement CSRF protection for state-changing API endpoints ([#335](https://github.com/AnnabelJoe/solarproof/issues/335))
+
+## [1.7.0] - 2026-05-28
+### Added
+- **#145:** add Stellar explorer deep links for all on-chain transactions ([#145](https://github.com/AnnabelJoe/solarproof/issues/145))
+- add JSDoc to all public API functions ([#316](https://github.com/AnnabelJoe/solarproof/issues/316))
+- complete OpenAPI 3.0 spec for all API endpoints ([#307](https://github.com/AnnabelJoe/solarproof/issues/307))
+- document public verifier API for third-party integrations ([#313](https://github.com/AnnabelJoe/solarproof/issues/313))
+
+## [1.6.0] - 2026-05-28
+### Added
+- implement SEP-41 approve/allowance/transfer_from ([#286](https://github.com/AnnabelJoe/solarproof/issues/286))
+- document Ed25519 meter signing protocol and key lifecycle ([#309](https://github.com/AnnabelJoe/solarproof/issues/309))
+
+## [1.5.0] - 2026-05-28
+### Added
+- **api:** add Idempotency-Key header support to readings API ([#267](https://github.com/AnnabelJoe/solarproof/issues/267))
+
+## [1.4.0] - 2026-05-28
+### Added
+- **observability:** add OpenTelemetry APM instrumentation ([#291](https://github.com/AnnabelJoe/solarproof/issues/291))
+- enhance developer onboarding guide ([#308](https://github.com/AnnabelJoe/solarproof/issues/308))
+
+## [1.3.0] - 2026-05-28
+### Added
+- add /api/health and /api/ready endpoints ([#275](https://github.com/AnnabelJoe/solarproof/issues/275))
+- document pnpm --frozen-lockfile requirement ([#302](https://github.com/AnnabelJoe/solarproof/issues/302))
+
+## [1.2.0] - 2026-05-28
+### Added
+- add governance voting UI ([#265](https://github.com/AnnabelJoe/solarproof/issues/265))
+
+## [1.1.0] - 2026-05-28
+### Added
+- responsive dashboard, certificate detail page, toast notifications, and accessibility improvements (704c0a5)
+
+## [1.0.0] - 2026-04-21
 ### Added
 - End-to-end cryptographic proof pipeline: Ed25519 meter signing → on-chain anchor → certificate minting → retirement
 - Three Soroban smart contracts: `energy_token` (SEP-41), `audit_registry`, `community_governance`
@@ -222,5 +429,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture Decision Records (`docs/adr/`)
 - API reference (`docs/API.md`), deployment guide (`docs/DEPLOYMENT.md`), onboarding guide (`docs/ONBOARDING.md`)
 
-[Unreleased]: https://github.com/AnnabelJoe/solarproof/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/AnnabelJoe/solarproof/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.8.2...v1.9.0
+[1.8.2]: https://github.com/AnnabelJoe/solarproof/compare/v1.8.1...v1.8.2
+[1.8.1]: https://github.com/AnnabelJoe/solarproof/compare/v1.8.0...v1.8.1
+[1.8.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.7.1...v1.8.0
+[1.7.1]: https://github.com/AnnabelJoe/solarproof/compare/v1.7.0...v1.7.1
+[1.7.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/AnnabelJoe/solarproof/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/AnnabelJoe/solarproof/releases/tag/v1.0.0

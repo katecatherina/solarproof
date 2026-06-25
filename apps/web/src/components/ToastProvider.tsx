@@ -63,7 +63,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={contextValue}>
       {children}
-      <div aria-live="polite" role="status" className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4 sm:bottom-4 sm:px-6">
+      <div aria-live="polite" aria-atomic="true" role="status" className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4 sm:bottom-4 sm:px-6">
         <div className="flex w-full max-w-md flex-col gap-3">
           {toasts.map((toast) => {
             const Icon = iconMap[toast.variant]
@@ -84,7 +84,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                     type="button"
                     onClick={() => dismissToast(toast.id)}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-full text-current/70 transition hover:text-current"
-                    aria-label="Dismiss notification"
+                    aria-label={`Dismiss ${toast.title} notification`}
                   >
                     <X className="h-4 w-4" aria-hidden="true" />
                   </button>

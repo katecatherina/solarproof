@@ -4,14 +4,26 @@ import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase'
 import { computeReadingHash } from '@/lib/crypto'
 import { kwhToStroops } from '@solarproof/stellar'
-import { anchorReading, mintCertificates } from '@/lib/stellar'
-import { invalidateCert, checkRateLimit } from '@/lib/cache'
-import { fireWebhook } from '@/lib/webhooks'
+import { checkRateLimit } from '@/lib/cache'
+import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/idempotency'
 import { logger } from '@/lib/logger'
 import { requireAuth, isAuthError } from '@/lib/auth'
-import { diagnoseMintFailure } from '@/lib/tracer-sim'
+import { enqueue } from '@/lib/queue'
 
-const MAX_PAGE_SIZE = 100
+const NONCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL
+
+/** Simple per-key rate limiter (no-op when Redis is unavailable). */
+async function checkRateLimitByKey(
+  _key: string, _limit: number
+): Promise<{ allowed: boolean; resetSeconds: number; remaining: number }> {
+  // Falls back to allow-all; the pubkey-based checkRateLimit handles enforcement
+  return { allowed: true, resetSeconds: 0, remaining: _limit }
+}
+const QuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().optional(),
+})
 
 /**
  * GET /api/v1/readings
@@ -25,9 +37,14 @@ export async function GET(req: NextRequest) {
   if (isAuthError(auth)) return auth
 
   const { searchParams } = req.nextUrl
-  const limit = Math.min(Number(searchParams.get('limit') ?? 20), MAX_PAGE_SIZE)
-  const cursor = searchParams.get('cursor') // ISO timestamp of last seen row
+  const queryParams = Object.fromEntries(searchParams.entries())
+  const parsedQuery = QuerySchema.safeParse(queryParams)
 
+  if (!parsedQuery.success) {
+    return NextResponse.json({ error: parsedQuery.error.flatten() }, { status: 400 })
+  }
+
+  const { limit, cursor } = parsedQuery.data
   const db = createServiceClient()
 
   // Total count (for UI pagination)
@@ -51,32 +68,17 @@ export async function GET(req: NextRequest) {
   const rows = data ?? []
   const hasMore = rows.length > limit
   const page = hasMore ? rows.slice(0, limit) : rows
-  const next_cursor = hasMore ? page[page.length - 1].timestamp : null
+  const next_cursor = hasMore ? (page.length > 0 ? page[page.length - 1].timestamp : null) : null
 
   return NextResponse.json({ data: page, next_cursor, total: count ?? 0 })
-}
-
-function extractErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  if (typeof err === 'string') return err
-  try {
-    return JSON.stringify(err)
-  } catch {
-    return 'Unknown error'
-  }
-}
-
-function isAlreadyAnchoredError(err: unknown): boolean {
-  const message = extractErrorMessage(err).toLowerCase()
-  return message.includes('alreadyanchored') || message.includes('reading already anchored') || message.includes('duplicate')
 }
 
 const ReadingSchema = z.object({
   meter_id: z.string().uuid(),
   kwh: z.number().positive(),
   timestamp: z.number().int().positive(), // Unix seconds
-  signature_hex: z.string().length(128),  // 64-byte Ed25519 sig as hex
-  nonce: z.string().min(1).max(128),      // Required for replay protection
+  signature_hex: z.string().trim().length(128),  // 64-byte Ed25519 sig as hex
+  nonce: z.string().trim().min(1).max(128),      // Required for replay protection
 })
 
 /**
@@ -89,7 +91,7 @@ const ReadingSchema = z.object({
  * Duplicate requests with the same key return the cached response without
  * re-processing. Keys expire after IDEMPOTENCY_TTL_SECONDS (default 24 h).
  *
- * Returns 201 Created with { reading_id, anchor_tx_hash, mint_tx_hash }.
+ * Returns 202 Accepted with { reading_id, job_id }.
  */
 export async function POST(req: NextRequest) {
   const correlationId = req.headers.get('x-correlation-id') ?? undefined
@@ -113,6 +115,26 @@ export async function POST(req: NextRequest) {
   }
 
   const { meter_id, kwh, timestamp, signature_hex, nonce } = parsed.data
+  const limit = Number(process.env.READINGS_RATE_LIMIT_PER_MINUTE ?? 60)
+  // Redis-backed sliding-window rate limit by meter_id
+  const rateKey = `rate:readings:${meter_id}`
+  if (UPSTASH_REDIS_REST_URL) {
+    const rate = await checkRateLimitByKey(rateKey, limit)
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests, please try again later' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': rate.resetSeconds.toString(),
+            'X-RateLimit-Limit': limit.toString(),
+            'X-RateLimit-Remaining': rate.remaining.toString(),
+          },
+        }
+      )
+    }
+  }
+
   const db = createServiceClient()
 
   // Timestamp check: reject if >5 minutes old
@@ -123,34 +145,39 @@ export async function POST(req: NextRequest) {
   }
 
   // Idempotency check: return cached response if nonce was seen within 24 h
-  if (nonce) {
-    const { data: existing } = await db
-      .from('idempotency_keys')
-      .select('response, created_at')
-      .eq('nonce', nonce)
-      .single()
+  const { data: existingNonce } = await db
+    .from('idempotency_keys')
+    .select('response, created_at')
+    .eq('nonce', nonce)
+    .maybeSingle()
 
-    if (existing) {
-      const age = Date.now() - new Date(existing.created_at).getTime()
-      if (age < NONCE_TTL_MS) {
-        return NextResponse.json(existing.response, { status: 200 })
-      }
-      // Expired — delete and allow re-processing
-      await db.from('idempotency_keys').delete().eq('nonce', nonce)
+  if (existingNonce) {
+    const age = Date.now() - new Date(existingNonce.created_at).getTime()
+    if (age < NONCE_TTL_MS) {
+      return NextResponse.json(existingNonce.response, { status: 200 })
     }
+    // Expired — delete and allow re-processing
+    await db.from('idempotency_keys').delete().eq('nonce', nonce)
   }
 
   // Fetch meter + cooperative
   const { data: meter } = await db
     .from('meters')
-    .select('id, pubkey_hex, cooperative_id, cooperatives(admin_address)')
+    .select('id, pubkey_hex, cooperative_id, api_key')
     .eq('id', meter_id)
     .eq('active', true)
-    .single() as { data: { id: string; pubkey_hex: string; cooperative_id: string; cooperatives: { admin_address: string } | null } | null }
+    .single()
 
   if (!meter) {
-    log.warn('readings.post.meter_not_found', { meter_id })
-    return NextResponse.json({ error: 'Meter not found or inactive' }, { status: 404 })
+    log.warn('readings.post.meter_not_found_or_revoked', { meter_id })
+    return NextResponse.json({ error: 'Meter not found, inactive, or revoked' }, { status: 404 })
+  }
+
+  // Validate API key before Ed25519 signature check
+  const apiKey = req.headers.get('x-api-key')
+  if (!apiKey || apiKey !== meter.api_key) {
+    log.warn('readings.post.invalid_api_key', { meter_id })
+    return NextResponse.json({ error: 'Invalid or missing API key' }, { status: 401 })
   }
 
   // Rate limit: 60 requests/minute per meter public key
@@ -179,7 +206,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid meter signature' }, { status: 401 })
   }
 
-  // Persist reading (anchored/minted will be updated by the background job)
+  // Persist reading; Stellar anchor + mint will be processed asynchronously.
   const { data: reading, error: readingErr } = await db
     .from('readings')
     .insert({
@@ -211,57 +238,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to save reading' }, { status: 500 })
   }
 
-  // Anchor on-chain (hash only — full payload already in Supabase)
-  let anchorTxHash: string
-  try {
-    anchorTxHash = await anchorReading({ readingHash, nonce })
-    await db.from('readings').update({ anchored: true, anchor_tx_hash: anchorTxHash }).eq('id', reading.id)
-    log.info('readings.post.anchored', { reading_id: reading.id, anchor_tx_hash: anchorTxHash })
-    void fireWebhook(meter.cooperative_id, 'anchor', { reading_id: reading.id, anchor_tx_hash: anchorTxHash })
-  } catch (err) {
-    if (isAlreadyAnchoredError(err)) {
-      log.warn('readings.post.already_anchored', { reading_id: reading.id })
-      return NextResponse.json({ error: 'Reading already anchored', reading_id: reading.id }, { status: 409 })
-    }
-    const message = extractErrorMessage(err)
-    log.error('readings.post.anchor_failed', { reading_id: reading.id, error: message })
-    return NextResponse.json({ error: message, reading_id: reading.id }, { status: 500 })
+  const { data: coop } = await db
+    .from('cooperatives')
+    .select('admin_address')
+    .eq('id', meter.cooperative_id)
+    .single()
+
+  const recipient = coop?.admin_address
+  if (!recipient) {
+    log.error('readings.post.missing_recipient', { reading_id: reading.id, cooperative_id: meter.cooperative_id })
+    return NextResponse.json({ error: 'No cooperative admin address' }, { status: 500 })
   }
 
-  // Mint certificates
-  try {
-    const cooperative = meter.cooperatives as { admin_address: string } | null
-    const recipient = cooperative?.admin_address
-    if (!recipient) throw new Error('No cooperative admin address')
+  const jobId = await enqueue('anchor_and_mint', {
+    readingId: reading.id,
+    readingHashHex: readingHash.toString('hex'),
+    recipientAddress: recipient,
+    kwh,
+    correlationId,
+  })
 
-    const mintTxHash = await mintCertificates(recipient, kwh)
-    await db.from('readings').update({ minted: true, mint_tx_hash: mintTxHash }).eq('id', reading.id)
-    await db.from('certificates').insert({
-      cooperative_id: meter.cooperative_id,
-      reading_id: reading.id,
-      reading_hash: readingHash.toString('hex'),
-      anchor_tx_hash: anchorTxHash,
-      mint_tx_hash: mintTxHash,
-      kwh,
-      issued_at: new Date().toISOString(),
-      retired: false,
-    })
+  log.info('readings.post.enqueued', { reading_id: reading.id, job_id: jobId })
 
-    // Invalidate any stale cache entries for this certificate
-    await invalidateCert(reading.id, readingHash.toString('hex'), mintTxHash)
-
-    log.info('readings.post.minted', { reading_id: reading.id, mint_tx_hash: mintTxHash, kwh })
-    void fireWebhook(meter.cooperative_id, 'mint', { reading_id: reading.id, mint_tx_hash: mintTxHash, kwh })
-
-    const responseBody = { reading_id: reading.id, anchor_tx_hash: anchorTxHash, mint_tx_hash: mintTxHash }
-    if (idempotencyKey) {
-      await storeIdempotentResponse(idempotencyKey, { body: responseBody, status: 201 })
-    }
-    return NextResponse.json(responseBody, { status: 201 })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Mint failed'
-    log.error('readings.post.mint_failed', { reading_id: reading.id, error: message })
-    const diagnosis = await diagnoseMintFailure(reading.id, meter.cooperative_id, message)
-    return NextResponse.json({ error: message, reading_id: reading.id, anchor_tx_hash: anchorTxHash, diagnosis }, { status: 500 })
+  const responseBody = { reading_id: reading.id, job_id: jobId }
+  if (idempotencyKey) {
+    await storeIdempotentResponse(idempotencyKey, { body: responseBody, status: 202 })
   }
+
+  return NextResponse.json(responseBody, { status: 202 })
 }

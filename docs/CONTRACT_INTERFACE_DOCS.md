@@ -121,6 +121,30 @@ Immutable on-chain anchor of Ed25519-signed meter readings for later verificatio
   - Returns admin address
   - Errors: `not initialized`
 
+- `extend_bucket_ttl(bucket_id: u32, threshold: u32, extend_to: u32)`
+  - `bucket_id`: bucket index for anchor storage (0-1023)
+  - `threshold`: extend only when current TTL is below this value
+  - `extend_to`: new TTL in ledgers if extension is applied
+  - Requires admin authorization
+
+- `extend_bucket_ttl_with_limits(bucket_id: u32, extend_to: u32, min_extension: u32, max_extension: u32)`
+  - `bucket_id`: bucket index for anchor storage (0-1023)
+  - `extend_to`: requested TTL in ledgers
+  - `min_extension`: minimum extension required to apply the update
+  - `max_extension`: maximum allowed extension
+  - Requires admin authorization
+
+- `extend_contract_ttl(threshold: u32, extend_to: u32)`
+  - `threshold`: extend only when current contract TTL is below this value
+  - `extend_to`: new TTL in ledgers for contract instance and code
+  - Requires admin authorization
+
+- `extend_contract_ttl_with_limits(extend_to: u32, min_extension: u32, max_extension: u32)`
+  - `extend_to`: requested TTL in ledgers
+  - `min_extension`: minimum extension required to apply the update
+  - `max_extension`: maximum allowed extension
+  - Requires admin authorization
+
 ### Audit anchor record format
 
 - `reading_hash: BytesN<32>`
