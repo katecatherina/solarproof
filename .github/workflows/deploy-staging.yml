@@ -39,6 +39,9 @@ jobs:
             apps/web
         id: deploy
 
+      - name: Smoke test
+        run: node scripts/smoke-test.mjs ${{ steps.deploy.outputs.url }}
+
       - name: Comment staging URL on commit
         run: |
           echo "Staging deployed: ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
