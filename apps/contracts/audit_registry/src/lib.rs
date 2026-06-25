@@ -647,3 +647,6 @@ mod tests {
         assert_eq!(admin, Address::generate(&env));
     }
 }
+
+#[cfg(test)]
+mod verify_integration_test;
