@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+
+// Abuse protection: 30 requests per 60 s per IP
+const VERIFY_RATE_LIMIT = 30
+const VERIFY_WINDOW_MS = 60_000
 
 /**
  * GET /api/verify?id=<certificate_id_or_reading_hash_or_tx_hash>
@@ -8,6 +13,23 @@ import { createServiceClient } from '@/lib/supabase'
  * Returns the full chain of custody for a certificate.
  */
 export async function GET(req: NextRequest) {
+  // Abuse protection — rate limit by client IP
+  const ip = getClientIp(req)
+  const rl = checkRateLimit(`verify:${ip}`, VERIFY_RATE_LIMIT, VERIFY_WINDOW_MS)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+          'X-RateLimit-Limit': String(VERIFY_RATE_LIMIT),
+          'X-RateLimit-Remaining': '0',
+        },
+      }
+    )
+  }
+
   const id = req.nextUrl.searchParams.get('id')?.trim()
   if (!id) {
     return NextResponse.json({ error: 'id parameter required' }, { status: 400 })

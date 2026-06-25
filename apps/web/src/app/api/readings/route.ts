@@ -5,6 +5,11 @@ import { createServiceClient } from '@/lib/supabase'
 import { anchorReading, mintCertificates } from '@/lib/stellar'
 import { computeReadingHash } from '@/lib/crypto'
 import { kwhToStroops } from '@solarproof/stellar'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+
+// Abuse protection: 10 requests per 60 s per IP
+const READINGS_RATE_LIMIT = 10
+const READINGS_WINDOW_MS = 60_000
 
 const ReadingSchema = z.object({
   meter_id: z.string().uuid(),
@@ -22,6 +27,23 @@ const ReadingSchema = z.object({
  * Body: { meter_id, kwh, timestamp, signature_hex }
  */
 export async function POST(req: NextRequest) {
+  // Abuse protection — rate limit by client IP
+  const ip = getClientIp(req)
+  const rl = checkRateLimit(`readings:${ip}`, READINGS_RATE_LIMIT, READINGS_WINDOW_MS)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+          'X-RateLimit-Limit': String(READINGS_RATE_LIMIT),
+          'X-RateLimit-Remaining': '0',
+        },
+      }
+    )
+  }
+
   const body = await req.json().catch(() => null)
   const parsed = ReadingSchema.safeParse(body)
   if (!parsed.success) {
