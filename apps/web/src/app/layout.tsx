@@ -5,6 +5,7 @@ import { Providers } from './providers'
 import { Navbar } from '@/components/navbar'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+export { reportWebVitals } from '@vercel/analytics/next'
 
 const inter = Inter({ subsets: ['latin'] })
 

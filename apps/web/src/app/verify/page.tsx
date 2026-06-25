@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Search, CheckCircle, XCircle, ExternalLink, Shield } from 'lucide-react'
 import { SectionSkeleton } from '@/components/skeleton'
+import { useMetrics, trackEvent } from '@/lib/metrics'
 
 interface ChainOfCustody {
   certificate: {
@@ -34,6 +35,7 @@ export default function VerifyPage() {
   const [result, setResult] = useState<ChainOfCustody | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const { trackTiming } = useMetrics()
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
@@ -41,17 +43,22 @@ export default function VerifyPage() {
     setLoading(true)
     setError(null)
     setResult(null)
+    const endTiming = trackTiming.start('verify_lookup')
     try {
       const res = await fetch(`/api/verify?id=${encodeURIComponent(query.trim())}`)
       const data = await res.json()
       if (!res.ok) {
         setError(data.error)
+        trackEvent('verify_error', { status: res.status })
         return
       }
       setResult(data)
+      trackEvent('verify_success', { retired: data.certificate?.retired ?? false })
     } catch {
       setError('Network error — please try again.')
+      trackEvent('verify_error', { status: 0 })
     } finally {
+      endTiming()
       setLoading(false)
     }
   }
