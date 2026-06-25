@@ -1,3 +1,13 @@
+## [1.18.1](https://github.com/AnnabelJoe/solarproof/compare/v1.18.0...v1.18.1) (2026-06-25)
+
+### Bug Fixes
+
+* **a11y:** improve toast ARIA semantics and dismiss labels\n\nCloses [#537](https://github.com/AnnabelJoe/solarproof/issues/537) ([ff8701d](https://github.com/AnnabelJoe/solarproof/commit/ff8701d1abd3afb60bc7fa8a801f672f4a577ee0))
+
+### Documentation
+
+* **adr:** add contract upgradeability/migration ADR\n\nCloses [#555](https://github.com/AnnabelJoe/solarproof/issues/555) ([2e9b4dd](https://github.com/AnnabelJoe/solarproof/commit/2e9b4dd37ffe64eef069c9d31cd0dac4a005722b))
+
 ## [1.18.0](https://github.com/AnnabelJoe/solarproof/compare/v1.17.0...v1.18.0) (2026-06-25)
 
 ### Features
