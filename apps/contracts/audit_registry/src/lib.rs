@@ -21,7 +21,14 @@
 //! |-----|-------------|-------|------|
 //! | `DataKey::Admin` | instance | `Address` | ~57 B |
 //! | `DataKey::TotalAnchors` | instance | `u32` | 4 B |
-//! | `DataKey::Anchor(hash)` | persistent | `AuditAnchor` | 36 B |
+//! | `DataKey::Anchor(hash)` | persistent | `u32` (ledger seq) | 4 B |
+//!
+//! ### Gas optimisation (issue #552)
+//! The previous design stored an `AuditAnchor { reading_hash, anchored_at_ledger }`
+//! struct (36 B) as the persistent entry value. Because `reading_hash` is already
+//! encoded in the storage key, it was pure duplication. The value is now a bare
+//! `u32` ledger sequence — a **88 % reduction** in entry value size (36 B → 4 B).
+//! `verify()` reconstructs the full `AuditAnchor` on read at zero extra I/O cost.
 //!
 //! ## Invariants
 //! 1. Each `reading_hash` can be anchored at most once.
@@ -170,12 +177,11 @@ impl AuditRegistry {
             return Err(Error::AlreadyAnchored);
         }
 
-        let anchor = AuditAnchor {
-            reading_hash: reading_hash.clone(),
-            anchored_at_ledger: env.ledger().sequence(),
-        };
-
-        env.storage().persistent().set(&key, &anchor);
+        // Store only the 4-byte ledger sequence — the hash is already the key.
+        // This saves 32 bytes per entry versus storing the full AuditAnchor struct.
+        env.storage()
+            .persistent()
+            .set(&key, &env.ledger().sequence());
 
         let count: u32 = env.storage().instance().get(&DataKey::TotalAnchors).unwrap_or(0);
         env.storage().instance().set(&DataKey::TotalAnchors, &(count + 1));
@@ -192,7 +198,14 @@ impl AuditRegistry {
     /// # Arguments
     /// * `reading_hash` — 32-byte SHA-256 hash to look up.
     pub fn verify(env: Env, reading_hash: BytesN<32>) -> Option<AuditAnchor> {
-        env.storage().persistent().get(&DataKey::Anchor(reading_hash))
+        let seq: Option<u32> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Anchor(reading_hash.clone()));
+        seq.map(|anchored_at_ledger| AuditAnchor {
+            reading_hash,
+            anchored_at_ledger,
+        })
     }
 
     /// Returns `true` if `reading_hash` has been anchored, `false` otherwise.
