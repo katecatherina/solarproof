@@ -314,6 +314,41 @@ export default function DashboardPage() {
       </section>
 
       {/* ------------------------------------------------------------------ */}
+      {/* Certificate metrics                                                  */}
+      {/* ------------------------------------------------------------------ */}
+      <section aria-labelledby="cert-heading" className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="cert-heading" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Certificate Metrics
+          </h2>
+          <a
+            href="/certificates"
+            className="text-sm text-yellow-600 hover:underline dark:text-yellow-400"
+          >
+            View full history →
+          </a>
+        </div>
+        {stats && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Issued</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.certificates_issued.toLocaleString()}</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Retired</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.certificates_retired.toLocaleString()}</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Active</p>
+              <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">
+                {(stats.certificates_issued - stats.certificates_retired).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
       {/* Recent readings table                                                */}
       {/* ------------------------------------------------------------------ */}
       <section aria-labelledby="readings-heading">
