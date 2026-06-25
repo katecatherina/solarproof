@@ -421,3 +421,6 @@ mod tests {
         assert_eq!(client.get_version(), soroban_sdk::String::from_str(&env, "1.0.0"));
     }
 }
+
+#[cfg(test)]
+mod verify_integration_test;
