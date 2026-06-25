@@ -1,3 +1,15 @@
+## [1.18.0](https://github.com/AnnabelJoe/solarproof/compare/v1.17.0...v1.18.0) (2026-06-25)
+
+### Features
+
+* **security:** add IP rate limiting for public endpoints ([#528](https://github.com/AnnabelJoe/solarproof/issues/528)) ([bce053a](https://github.com/AnnabelJoe/solarproof/commit/bce053a4bb7dc7940af2a81328ae293e9d3dd5cc))
+
+### Documentation
+
+* add accessibility and localization contribution guide ([#588](https://github.com/AnnabelJoe/solarproof/issues/588)) ([df82209](https://github.com/AnnabelJoe/solarproof/commit/df822095ea40fc78bbecedb08d852f250df8165f))
+* add production threat model review ([#601](https://github.com/AnnabelJoe/solarproof/issues/601)) ([c2ba58e](https://github.com/AnnabelJoe/solarproof/commit/c2ba58edc6f3a0462506879e19bad33cd14c7ddd))
+* **backlog:** add certificate retirement reporting backlog\n\nCloses [#612](https://github.com/AnnabelJoe/solarproof/issues/612) ([8dcad69](https://github.com/AnnabelJoe/solarproof/commit/8dcad69daf7fba4c4953cdf1be14f6df6014f82f))
+
 ## [1.17.0](https://github.com/AnnabelJoe/solarproof/compare/v1.16.0...v1.17.0) (2026-06-25)
 
 ### Features
