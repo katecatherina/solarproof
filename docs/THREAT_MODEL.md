@@ -1,135 +1,182 @@
-# Production Threat Model Review
+# SolarProof — Threat Model
 
-> **Status:** Pre-mainnet review — must be resolved before mainnet launch  
-> **Last updated:** 2026-06-25  
-> **Scope:** SolarProof API, smart contracts, key management, and public verifier
+**Methodology:** STRIDE  
+**Last reviewed:** 2026-04-24  
+**Reviewer:** security-aware contributor
 
 ---
 
-## 1. System overview
+## 1. System Overview
 
 ```
 Smart Meter (Ed25519 keypair)
-        │  POST /api/readings
+        │  POST /api/readings  { kwh, timestamp, signature }
         ▼
 SolarProof API (Next.js / Vercel)
-        │  Supabase (Postgres)
+        │  1. Verify Ed25519 signature
+        │  2. Anchor reading hash → audit_registry (Soroban)
+        │  3. Mint energy_token (1 token = 1 kWh)
         ▼
-Stellar Mainnet (Soroban)
-        ├── energy_token
-        ├── audit_registry
-        └── community_governance
+Stellar Testnet (Soroban)
+        ├── energy_token        — SEP-41 certificate token
+        ├── audit_registry      — immutable signed-reading anchors
+        └── community_governance — cooperative proposals + voting
         ▼
-Public Verifier  (/verify)
+Supabase (off-chain store)
+        └── readings, meter registry, certificate metadata
 ```
 
-Trust boundaries:
-- **Meter → API** — untrusted network (public internet)
-- **API → Supabase** — service-role key, internal
-- **API → Stellar** — minter keypair signs transactions, public network
-- **Verifier → API** — unauthenticated public consumers
-
 ---
 
-## 2. Threat inventory (STRIDE)
-
-### 2.1 Spoofing
-
-| Threat | Component | Mitigation | Status |
-|---|---|---|---|
-| Attacker submits reading with fabricated signature | `POST /api/readings` | Ed25519 signature verified against registered meter pubkey | ✅ Implemented |
-| Attacker replays a previously valid reading | `POST /api/readings` | Reading hash includes `meter_id + kwh + timestamp`; duplicate hashes rejected by DB unique constraint | ⚠️ **Verify DB constraint exists** |
-| Rogue meter registered by attacker | Meter registration flow | Cooperative admin must authorise meter registration | ⚠️ **Review admin auth flow** |
-
-### 2.2 Tampering
-
-| Threat | Component | Mitigation | Status |
-|---|---|---|---|
-| Database row altered after anchor | Supabase `readings` / `certificates` | Reading hash and anchor tx hash are immutable on-chain — tampered DB rows will fail on-chain verification | ✅ By design |
-| Contract upgrade changes token semantics | `energy_token` | Admin key required; upgrade log should be public | ⚠️ **Document upgrade policy** |
-| Supply chain attack on npm dependencies | All Node.js code | Use exact versions in `package.json`; run `pnpm audit` in CI | ⚠️ **Add `pnpm audit` to CI** |
-
-### 2.3 Repudiation
-
-| Threat | Component | Mitigation | Status |
-|---|---|---|---|
-| Minter denies issuing a certificate | Stellar | Every mint recorded on-chain with tx hash | ✅ By design |
-| Cooperative admin denies approving a meter | DB | Add `approved_by` + `approved_at` audit columns to `meters` table | ⚠️ **Not yet implemented** |
-
-### 2.4 Information disclosure
-
-| Threat | Component | Mitigation | Status |
-|---|---|---|---|
-| `signature_hex` exposed in public verifier response | `GET /api/verify` | Currently returned — evaluate whether full signature needs to be public | ⚠️ **Review exposure** |
-| Supabase service-role key leaked | API environment | Key stored in Vercel env vars, never in repo; rotate on any suspected leak | ✅ Process defined |
-| Minter private key exposed | Stellar | Store in Vercel secret; restrict to API process only | ✅ Process defined |
-| Error messages leak internal stack traces | API routes | All errors return a message string, not a stack trace | ✅ Implemented |
-
-### 2.5 Denial of service
-
-| Threat | Component | Mitigation | Status |
-|---|---|---|---|
-| Flood of POST /api/readings | API | IP rate limiting (10 req/60s) | ✅ Implemented |
-| Flood of GET /api/verify | API | IP rate limiting (30 req/60s) | ✅ Implemented |
-| Stellar transaction spam driving up fees | Stellar | Rate limiting at API prevents excessive anchoring | ✅ Covered |
-| Very large request body | `POST /api/readings` | Next.js default body limit (4 MB); Zod schema rejects wrong field types | ✅ Covered |
-
-### 2.6 Elevation of privilege
-
-| Threat | Component | Mitigation | Status |
-|---|---|---|---|
-| Non-admin mints tokens directly via contract | `energy_token` | Contract enforces admin-only mint | ✅ Contract-enforced |
-| SQL injection via API params | Supabase | Supabase JS SDK uses parameterised queries | ✅ By SDK design |
-| Certificate retired by non-owner | `energy_token` | Retirement restricted to token holder | ✅ Contract-enforced |
-
----
-
-## 3. Open items before mainnet
-
-The following items **must be resolved** before launching on Stellar Mainnet:
-
-| # | Item | Owner | Priority |
-|---|---|---|---|
-| M-1 | Verify `reading_hash` unique constraint in DB prevents replay attacks | Backend | Critical |
-| M-2 | Audit meter registration flow — confirm only cooperative admins can register meters | Backend | Critical |
-| M-3 | Document and enforce smart contract upgrade policy (time-lock or multi-sig admin) | Contracts | High |
-| M-4 | Add `pnpm audit` (or `npm audit`) step to CI and fail on high/critical vulnerabilities | DevOps | High |
-| M-5 | Review whether `signature_hex` should be omitted from the public verifier response | Backend | Medium |
-| M-6 | Add `approved_by` / `approved_at` audit columns to `meters` table | Backend | Medium |
-| M-7 | Conduct a manual penetration test of all public API endpoints | Security | High |
-| M-8 | Perform a third-party audit of all three Soroban smart contracts | Contracts | Critical |
-| M-9 | Confirm minter key rotation procedure is documented and tested | DevOps | High |
-| M-10 | Validate Vercel environment variable access controls (least-privilege) | DevOps | Medium |
-
----
-
-## 4. Key assets and risk classification
+## 2. Assets
 
 | Asset | Confidentiality | Integrity | Availability |
 |---|---|---|---|
-| Minter private key | Critical | Critical | High |
-| Supabase service-role key | Critical | High | Medium |
-| Meter public keys (DB) | Low | Critical | High |
-| Certificate records (DB) | Low | Critical | High |
-| Anchor tx hashes (on-chain) | Public | Critical (immutable) | High |
+| Meter Ed25519 private key | Critical | Critical | High |
+| `MINTER_SECRET_KEY` (Stellar signing key) | Critical | Critical | High |
+| On-chain reading hashes (audit_registry) | Public | Critical | High |
+| Energy token balances (energy_token) | Public | Critical | High |
+| Off-chain reading payloads (Supabase) | Medium | High | High |
+| Governance proposals & votes | Public | High | Medium |
 
 ---
 
-## 5. Assumptions and trust boundaries
+## 3. Trust Boundaries
 
-- Stellar Mainnet nodes are assumed honest (Byzantine fault tolerant via SCP).
-- Vercel infrastructure is trusted for secret storage; no secrets in git.
-- Meter devices are assumed to be in a physically secure location controlled by the cooperative.
-- Supabase RLS policies are **not** currently relied upon for security (service-role key bypasses RLS) — review for mainnet.
+| Boundary | Trust level |
+|---|---|
+| Smart meter device | Trusted if Ed25519 keypair is uncompromised |
+| SolarProof API (Vercel) | Trusted server; holds `MINTER_SECRET_KEY` |
+| Stellar network | Trusted (BFT consensus) |
+| Supabase | Trusted for availability; **not** trusted for integrity (hash is the source of truth) |
+| Public verifier callers | Untrusted |
+| Community governance voters | Untrusted (Sybil-possible without token gating) |
 
 ---
 
-## 6. Review sign-off
+## 4. STRIDE Threat Catalogue
 
-Before mainnet deployment, all Critical and High items in Section 3 must be closed. Record sign-off here:
+### 4.1 Spoofing
 
-| Reviewer | Date | Scope | Outcome |
-|---|---|---|---|
-| (pending) | | Full threat model | |
-| (pending) | | Smart contract audit | |
-| (pending) | | Penetration test | |
+#### S1 — Forged meter reading
+**Attack vector:** Submit `POST /api/readings` with a fabricated `signature_hex` for a registered meter.  
+**Impact:** Fraudulent energy certificates minted.  
+**Mitigation:** API verifies Ed25519 signature against the meter's registered `pubkey_hex` before anchoring or minting. Invalid signatures return HTTP 401.  
+**Residual risk:** Low — requires breaking Ed25519 or compromising the meter keypair.
+
+#### S2 — Impersonation of the minter
+**Attack vector:** Attacker submits a Stellar transaction calling `energy_token.mint()` without the minter's signature.  
+**Impact:** Unauthorized certificate minting.  
+**Mitigation:** `mint()` calls `minter.require_auth()` — Soroban rejects the transaction if the minter's Ed25519 signature is absent.  
+**Residual risk:** Low.
+
+---
+
+### 4.2 Tampering
+
+#### T1 — Off-chain reading payload tampering
+**Attack vector:** Attacker with Supabase service-role key modifies `readings` table records (kwh, meter_id, timestamp).  
+**Impact:** Misleading audit trail; certificate amounts appear incorrect.  
+**Mitigation:** The on-chain `reading_hash` is the canonical source of truth. Any tampering is detectable by recomputing `sha256(meter_id ‖ kwh_stroops_le ‖ timestamp_le)` and comparing to the anchored hash.  
+**Residual risk:** Low for integrity; Medium for availability (records could be deleted).
+
+#### T2 — Persistent storage expiry (TTL)
+**Attack vector:** Soroban persistent storage entries expire if TTL is not extended before the ledger advances past the entry's live-until ledger.  
+**Impact:** Loss of anchored hashes or token balances on mainnet.  
+**Mitigation:** TTL bump logic must be implemented before mainnet deployment (tracked in roadmap).  
+**Residual risk:** High on mainnet without TTL management; Low on testnet.
+
+---
+
+### 4.3 Repudiation
+
+#### R1 — Meter operator denies submitting a reading
+**Attack vector:** Meter operator claims a reading was fabricated.  
+**Impact:** Dispute over certificate legitimacy.  
+**Mitigation:** The Ed25519 signature over `(meter_id, kwh_stroops, timestamp)` is stored in Supabase and the hash is anchored on-chain. The signature is non-repudiable as long as the meter private key is not shared.  
+**Residual risk:** Low.
+
+#### R2 — API denies anchoring a reading
+**Attack vector:** API operator claims a reading was never anchored.  
+**Impact:** Dispute over audit trail completeness.  
+**Mitigation:** The Stellar ledger provides an immutable, publicly auditable record of every `anchor()` call. The transaction hash is returned to the caller and stored in Supabase.  
+**Residual risk:** Low.
+
+---
+
+### 4.4 Information Disclosure
+
+#### I1 — Minter secret key leakage
+**Attack vector:** `MINTER_SECRET_KEY` accidentally committed to git or exposed in logs.  
+**Impact:** Attacker can mint arbitrary certificates.  
+**Mitigation:** Key stored in GitHub Actions secrets / Vercel environment variables (never committed). Gitleaks secret-scanning workflow blocks accidental exposure in CI.  
+**Residual risk:** Medium — if the key leaks, `set_minter()` (admin-only) can rotate it.
+
+#### I2 — Meter private key extraction
+**Attack vector:** Physical attacker extracts the Ed25519 private key from meter hardware.  
+**Impact:** Attacker can forge unlimited readings for that meter.  
+**Mitigation (current):** Compromised meter can be deactivated in Supabase (`active = false`); API rejects readings from inactive meters.  
+**Mitigation (future):** Hardware HSM / TPM integration (Level 2 roadmap).  
+**Residual risk:** Medium — key extraction from software-only meters is feasible.
+
+---
+
+### 4.5 Denial of Service
+
+#### D1 — API flooding
+**Attack vector:** Attacker sends high-volume `POST /api/readings` requests to exhaust Vercel serverless concurrency or Stellar RPC rate limits.  
+**Impact:** Legitimate meter readings are delayed or dropped.  
+**Mitigation:** Vercel edge rate limiting; Stellar RPC has per-IP rate limits. Supabase row-level security prevents bulk inserts from unauthenticated callers.  
+**Residual risk:** Medium — no explicit application-level rate limiting is currently implemented.
+
+#### D2 — Supabase data deletion
+**Attack vector:** Attacker with Supabase service-role key deletes reading records.  
+**Impact:** Off-chain audit trail unavailable; on-chain hashes become unverifiable without the original payload.  
+**Mitigation:** Supabase row-level security; regular backups (see `docs/BACKUP.md`).  
+**Residual risk:** Medium for availability.
+
+---
+
+### 4.6 Elevation of Privilege
+
+#### E1 — Governance Sybil attack
+**Attack vector:** Attacker creates many Stellar addresses and votes multiple times on a proposal.  
+**Impact:** Proposal outcome manipulated.  
+**Mitigation (current):** Each address can vote once per proposal (enforced on-chain). Quorum is percentage-based.  
+**Mitigation (future):** Token-weighted voting (requires holding SPEC tokens).  
+**Residual risk:** Medium — 1-address-1-vote is Sybil-vulnerable without token gating.
+
+#### E2 — Replay attack on anchor
+**Attack vector:** Network observer re-submits a previously valid signed reading to anchor it twice.  
+**Impact:** Duplicate certificate minting.  
+**Mitigation:** `audit_registry.anchor()` panics with `"reading already anchored"` on duplicate hashes. The hash includes `meter_id`, `kwh_stroops`, and `timestamp`, making each reading unique.  
+**Residual risk:** Low.
+
+#### E3 — Integer overflow in governance quorum
+**Attack vector:** Proposer engineers a vote count such that `yes_votes * 100` overflows `u32`.  
+**Impact:** Incorrect quorum calculation; proposal passes or fails incorrectly.  
+**Mitigation:** Soroban SDK compiles with `overflow-checks = true` in release profile — overflow panics rather than wrapping.  
+**Residual risk:** Low.
+
+---
+
+## 5. Attack Surface Summary
+
+| Attack vector | Covered by |
+|---|---|
+| Compromised meter key | Ed25519 verification + meter deactivation (S1, I2) |
+| Replay attack | Duplicate-hash rejection in audit_registry (E2) |
+| Contract exploit (unauthorized mint) | `require_auth()` in energy_token (S2) |
+| API abuse / flooding | Vercel rate limits + RLS (D1) |
+| Minter key leakage | Secret scanning + key rotation (I1) |
+| Governance manipulation | Per-address vote limit + future token gating (E1) |
+| Storage expiry | TTL management (T2) — open risk before mainnet |
+
+---
+
+## 6. Out-of-Scope Threats
+
+- Stellar network-level attacks (validator collusion, eclipse attacks)
+- Vercel / hosting infrastructure compromise
+- Browser-side attacks on the public verifier UI
+- Supply-chain attacks on npm/cargo dependencies
