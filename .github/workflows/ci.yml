@@ -60,6 +60,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/contracts
+          cache-on-failure: true
       - name: fmt
         run: cargo fmt --all -- --check
         working-directory: apps/contracts
