@@ -31,64 +31,43 @@ jobs:
       - name: Build
         run: stellar contract build
         working-directory: apps/contracts
-      
-      - name: Deploy energy_token (with cost monitoring)
-        id: deploy_energy_token
+      - name: Deploy energy_token
+        id: deploy-energy
         run: |
-          chmod +x scripts/monitor-deployment-cost.sh
-          ./scripts/monitor-deployment-cost.sh \
-            "energy_token" \
-            "apps/contracts/target/wasm32-unknown-unknown/release/energy_token.wasm" \
-            "${{ github.event.inputs.network || 'testnet' }}" \
-            "${{ secrets.DEPLOYER_SECRET_KEY }}"
-      
-      - name: Deploy audit_registry (with cost monitoring)
-        id: deploy_audit_registry
+          echo "contract_id=$(stellar contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/energy_token.wasm \
+            --source ${{ secrets.DEPLOYER_SECRET_KEY }} \
+            --network ${{ github.event.inputs.network || 'testnet' }})" >> $GITHUB_OUTPUT
+        working-directory: apps/contracts
+      - name: Deploy audit_registry
+        id: deploy-registry
         run: |
-          chmod +x scripts/monitor-deployment-cost.sh
-          ./scripts/monitor-deployment-cost.sh \
-            "audit_registry" \
-            "apps/contracts/target/wasm32-unknown-unknown/release/audit_registry.wasm" \
-            "${{ github.event.inputs.network || 'testnet' }}" \
-            "${{ secrets.DEPLOYER_SECRET_KEY }}"
-      
-      - name: Deploy community_governance (with cost monitoring)
-        id: deploy_community_governance
+          echo "contract_id=$(stellar contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/audit_registry.wasm \
+            --source ${{ secrets.DEPLOYER_SECRET_KEY }} \
+            --network ${{ github.event.inputs.network || 'testnet' }})" >> $GITHUB_OUTPUT
+        working-directory: apps/contracts
+      - name: Deploy community_governance
+        id: deploy-governance
         run: |
-          chmod +x scripts/monitor-deployment-cost.sh
-          ./scripts/monitor-deployment-cost.sh \
-            "community_governance" \
-            "apps/contracts/target/wasm32-unknown-unknown/release/community_governance.wasm" \
-            "${{ github.event.inputs.network || 'testnet' }}" \
-            "${{ secrets.DEPLOYER_SECRET_KEY }}"
-      
-      - name: Summary - Contract Deployment Costs
-        if: always()
-        run: |
-          echo "## 📊 Contract Deployment Costs" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### energy_token" >> $GITHUB_STEP_SUMMARY
-          echo "- Contract ID: ${{ steps.deploy_energy_token.outputs.contract_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- WASM Size: ${{ steps.deploy_energy_token.outputs.wasm_size_kb }}KB" >> $GITHUB_STEP_SUMMARY
-          echo "- Deployment Time: ${{ steps.deploy_energy_token.outputs.deployment_time_ms }}ms" >> $GITHUB_STEP_SUMMARY
-          echo "- Estimated Fee: ${{ steps.deploy_energy_token.outputs.estimated_fee }} stroops" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### audit_registry" >> $GITHUB_STEP_SUMMARY
-          echo "- Contract ID: ${{ steps.deploy_audit_registry.outputs.contract_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- WASM Size: ${{ steps.deploy_audit_registry.outputs.wasm_size_kb }}KB" >> $GITHUB_STEP_SUMMARY
-          echo "- Deployment Time: ${{ steps.deploy_audit_registry.outputs.deployment_time_ms }}ms" >> $GITHUB_STEP_SUMMARY
-          echo "- Estimated Fee: ${{ steps.deploy_audit_registry.outputs.estimated_fee }} stroops" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### community_governance" >> $GITHUB_STEP_SUMMARY
-          echo "- Contract ID: ${{ steps.deploy_community_governance.outputs.contract_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- WASM Size: ${{ steps.deploy_community_governance.outputs.wasm_size_kb }}KB" >> $GITHUB_STEP_SUMMARY
-          echo "- Deployment Time: ${{ steps.deploy_community_governance.outputs.deployment_time_ms }}ms" >> $GITHUB_STEP_SUMMARY
-          echo "- Estimated Fee: ${{ steps.deploy_community_governance.outputs.estimated_fee }} stroops" >> $GITHUB_STEP_SUMMARY
-      
-      - name: Upload deployment costs artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
+          echo "contract_id=$(stellar contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/community_governance.wasm \
+            --source ${{ secrets.DEPLOYER_SECRET_KEY }} \
+            --network ${{ github.event.inputs.network || 'testnet' }})" >> $GITHUB_OUTPUT
+        working-directory: apps/contracts
+      - name: Setup Node for smoke test
+        uses: actions/setup-node@v4
         with:
-          name: deployment-costs-${{ github.event.inputs.network || 'testnet' }}
-          path: deployment-costs.json
-          retention-days: 30
+          node-version: 22
+      - name: Install JavaScript dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+      - name: Run post-deployment smoke test
+        run: pnpm exec node scripts/smoke-test.mjs
+        env:
+          SMOKE_NETWORK: ${{ github.event.inputs.network || 'testnet' }}
+          ENERGY_TOKEN_ID: ${{ steps.deploy-energy.outputs.contract_id }}
+          AUDIT_REGISTRY_ID: ${{ steps.deploy-registry.outputs.contract_id }}
+          SMOKE_TOKEN_MINTER_SECRET_KEY: ${{ secrets.SMOKE_TOKEN_MINTER_SECRET_KEY }}
+          SMOKE_METER_SECRET_KEY: ${{ secrets.SMOKE_METER_SECRET_KEY }}
