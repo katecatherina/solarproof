@@ -1219,3 +1219,6 @@ mod tests {
         assert_eq!(amount, 200_i128);
     }
 }
+
+#[cfg(test)]
+mod overflow_tests;
