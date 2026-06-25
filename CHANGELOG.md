@@ -1,3 +1,9 @@
+## [1.19.0](https://github.com/AnnabelJoe/solarproof/compare/v1.18.2...v1.19.0) (2026-06-25)
+
+### Features
+
+* add contract call cost monitoring to deployments ([b8d149c](https://github.com/AnnabelJoe/solarproof/commit/b8d149c51fb8c0182f47145a359e5723376f23c5)), closes [#571](https://github.com/AnnabelJoe/solarproof/issues/571)
+
 ## [1.18.2](https://github.com/AnnabelJoe/solarproof/compare/v1.18.1...v1.18.2) (2026-06-25)
 
 ### Bug Fixes
