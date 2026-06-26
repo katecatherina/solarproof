@@ -1,68 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase'
 
+const MAX_PAGE_SIZE = 100
+
+const QuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(20),
+  cursor: z.string().optional(),
+  q: z.string().trim().default(''),
+  status: z.enum(['active', 'retired']).nullable().optional(),
+  date_from: z.string().optional(),
+  date_to: z.string().optional(),
+})
+
 /**
- * GET /api/certificates
+ * GET /api/v1/certificates
  *
- * Query params:
- *   from      – ISO date (start of range)
- *   to        – ISO date (end of range)
- *   meter_id  – filter by meter UUID
- *   format    – "csv" to download as CSV
- *   page      – 1-based page number (default 1)
- *   limit     – rows per page (default 20, max 100)
+ * Cursor-based pagination via `cursor` (ISO timestamp of `issued_at`) and
+ * `limit` (max 100). Returns `{ data, next_cursor, total }`.
+ *
+ * Filter params:
+ *   q          — prefix search on certificate id or meter_id (via readings join)
+ *   status     — "active" | "retired"
+ *   date_from  — ISO date string (inclusive lower bound on issued_at)
+ *   date_to    — ISO date string (inclusive upper bound on issued_at)
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
-  const from = searchParams.get('from')
-  const to = searchParams.get('to')
-  const meter_id = searchParams.get('meter_id')
-  const format = searchParams.get('format')
-  const page = Math.max(1, Number(searchParams.get('page') ?? 1))
-  const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') ?? 20)))
-  const offset = (page - 1) * limit
+  const queryParams = Object.fromEntries(searchParams.entries())
+  const parsedQuery = QuerySchema.safeParse(queryParams)
+
+  if (!parsedQuery.success) {
+    return NextResponse.json({ error: parsedQuery.error.flatten() }, { status: 400 })
+  }
+
+  const { limit, cursor, q, status, date_from: dateFrom, date_to: dateTo } = parsedQuery.data
 
   const db = createServiceClient()
 
-  let query = db
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query = (db as any)
     .from('certificates')
-    .select('id, kwh, issued_at, retired, retired_at, anchor_tx_hash, mint_tx_hash, reading_id, cooperative_id', { count: 'exact' })
-    .order('issued_at', { ascending: false })
-
-  if (from) query = query.gte('issued_at', from)
-  if (to) query = query.lte('issued_at', to)
-  if (meter_id) {
-    // join via reading_id → readings.meter_id
-    const { data: readingIds } = await db
-      .from('readings')
-      .select('id')
-      .eq('meter_id', meter_id)
-    const ids = (readingIds ?? []).map((r) => r.id)
-    if (ids.length === 0) return NextResponse.json({ certificates: [], total: 0, page, limit })
-    query = query.in('reading_id', ids)
-  }
-
-  const { data, error, count } = await query.range(offset, offset + limit - 1)
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  const certificates = data ?? []
-
-  if (format === 'csv') {
-    const header = 'id,kwh,issued_at,retired,retired_at,anchor_tx_hash,mint_tx_hash'
-    const rows = certificates.map((c) =>
-      [c.id, c.kwh, c.issued_at, c.retired, c.retired_at ?? '', c.anchor_tx_hash, c.mint_tx_hash].join(',')
+    .select(
+      'id, kwh, issued_at, retired, retired_at, retired_by, mint_tx_hash, readings!inner(meter_id)',
+      { count: 'exact' }
     )
-    const csv = [header, ...rows].join('\n')
-    return new NextResponse(csv, {
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': 'attachment; filename="certificates.csv"',
-      },
-    })
+    .order('issued_at', { ascending: false })
+    .limit(limit + 1)
+
+  if (cursor) query = query.lt('issued_at', cursor)
+  if (status === 'active') query = query.eq('retired', false)
+  if (status === 'retired') query = query.eq('retired', true)
+  if (dateFrom) query = query.gte('issued_at', dateFrom)
+  if (dateTo) query = query.lte('issued_at', dateTo + 'T23:59:59.999Z')
+
+  // Text search: match cert id prefix OR meter_id prefix via the joined reading
+  if (q) {
+    query = query.or(`id.ilike.${q}%,readings.meter_id.ilike.${q}%`)
   }
 
-  return NextResponse.json({ certificates, total: count ?? 0, page, limit })
+  const { data, error, count } = await query
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const rows = (data ?? []) as Array<{
+    id: string
+    kwh: number
+    issued_at: string
+    retired: boolean
+    retired_at: string | null
+    retired_by: string | null
+    mint_tx_hash: string | null
+    readings: { meter_id: string } | { meter_id: string }[]
+  }>
+
+  const hasMore = rows.length > limit
+  const page = hasMore ? rows.slice(0, limit) : rows
+  const next_cursor = hasMore ? page[page.length - 1].issued_at : null
+
+  // Flatten the joined meter_id onto each row
+  const normalized = page.map(({ readings, ...cert }) => ({
+    ...cert,
+    meter_id: Array.isArray(readings) ? readings[0]?.meter_id : readings?.meter_id ?? null,
+  }))
+
+  return NextResponse.json({ data: normalized, next_cursor, total: count ?? 0 })
 }

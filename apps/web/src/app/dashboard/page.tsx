@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { WalletGate } from '@/components/wallet-gate'
 import {
   AreaChart,
   Area,
@@ -9,13 +10,15 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
   Legend,
+  LineChart,
+  Line,
 } from 'recharts'
 import { useTheme } from 'next-themes'
-import { Zap, Award, Leaf, TrendingUp } from 'lucide-react'
+import { Zap, Award, Leaf, TrendingUp, Download } from 'lucide-react'
 import { StatCardSkeleton, ChartSkeleton, TableRowSkeleton } from '@/components/skeleton'
+import { useState, useMemo } from 'react'
+import { useRealtimeReadings } from '@/hooks/use-realtime-readings'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,19 +31,48 @@ interface Reading {
   verified: boolean
 }
 
-interface Stats {
+interface AnalyticsSummary {
   total_kwh: number
   certificates_issued: number
   certificates_retired: number
   active_meters: number
 }
 
+interface TrendBucket {
+  bucket: string
+  kwh: number
+  certs_issued: number
+  certs_retired: number
+}
+
+interface MeterStat {
+  meter_id: string
+  meter_name: string
+  total_kwh: number
+  reading_count: number
+  certs_generated: number
+}
+
+interface AnalyticsResponse {
+  summary: AnalyticsSummary
+  trends: TrendBucket[]
+  meter_stats: MeterStat[]
+  range: { start: string; end: string; granularity: string }
+}
+
+type Period = 'day' | 'month' | 'year'
+
 // ---------------------------------------------------------------------------
-// Mock fetch helpers (replace with real API calls)
+// Fetch helpers
 // ---------------------------------------------------------------------------
-async function fetchStats(): Promise<Stats> {
-  const res = await fetch('/api/readings?type=stats')
-  if (!res.ok) throw new Error('Failed to load stats')
+async function fetchAnalytics(params: { date_from?: string; date_to?: string; granularity?: Period }): Promise<AnalyticsResponse> {
+  const query = new URLSearchParams()
+  if (params.date_from) query.set('date_from', params.date_from)
+  if (params.date_to) query.set('date_to', params.date_to)
+  if (params.granularity) query.set('granularity', params.granularity)
+  
+  const res = await fetch(`/api/cooperative/stats?${query.toString()}`)
+  if (!res.ok) throw new Error('Failed to load analytics')
   return res.json()
 }
 
@@ -76,7 +108,7 @@ function StatCard({ label, value, icon: Icon, description }: StatCardProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Chart colours that respect dark mode
+// Accessible chart colours
 // ---------------------------------------------------------------------------
 function useChartColors() {
   const { resolvedTheme } = useTheme()
@@ -84,10 +116,12 @@ function useChartColors() {
   return {
     grid: dark ? '#374151' : '#e5e7eb',
     text: dark ? '#9ca3af' : '#6b7280',
-    area: dark ? '#fbbf24' : '#f59e0b',
-    areaFill: dark ? '#fbbf2440' : '#fef3c7',
-    bar1: dark ? '#fbbf24' : '#f59e0b',
-    bar2: dark ? '#34d399' : '#10b981',
+    area: '#f59e0b',
+    areaFill: dark ? '#f59e0b33' : '#fef3c7',
+    bar1: '#f59e0b',
+    bar2: '#0ea5e9',
+    line1: '#10b981', // green
+    line2: '#ef4444', // red
     tooltip: {
       bg: dark ? '#1f2937' : '#ffffff',
       border: dark ? '#374151' : '#e5e7eb',
@@ -97,362 +131,297 @@ function useChartColors() {
 }
 
 // ---------------------------------------------------------------------------
+// CSV export
+// ---------------------------------------------------------------------------
+function exportCsv(data: object[], filename: string) {
+  if (!data || data.length === 0) return
+  const rows = data as Record<string, unknown>[]
+  const headers = Object.keys(rows[0]).join(',')
+  const body = rows.map((row) => Object.values(row).map(v => `"${v}"`).join(',')).join('\n')
+  const blob = new Blob([`${headers}\n${body}`], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard page
 // ---------------------------------------------------------------------------
 export default function DashboardPage() {
+  const [granularity, setGranularity] = useState<Period>('day')
+  const [range, setRange] = useState<'30d' | '90d' | 'ytd' | 'all'>('30d')
+  
+  const dateParams = useMemo(() => {
+    const now = new Date()
+    let from: Date | undefined
+    if (range === '30d') from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    if (range === '90d') from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+    if (range === 'ytd') from = new Date(now.getFullYear(), 0, 1)
+    if (range === 'all') from = new Date(0) // 1970-01-01
+    
+    return {
+      date_from: from?.toISOString(),
+      date_to: now.toISOString(),
+      granularity,
+    }
+  }, [range, granularity])
+
+  const { isConnected, error: wsError } = useRealtimeReadings()
+
   const {
-    data: stats,
-    isLoading: statsLoading,
-    error: statsError,
-  } = useQuery({ queryKey: ['stats'], queryFn: fetchStats })
+    data: analytics,
+    isLoading: analyticsLoading,
+    error: analyticsError,
+  } = useQuery({ 
+    queryKey: ['analytics', dateParams], 
+    queryFn: () => fetchAnalytics(dateParams) 
+  })
 
   const {
     data: readings,
     isLoading: readingsLoading,
     error: readingsError,
-  } = useQuery({ queryKey: ['readings'], queryFn: fetchReadings })
+  } = useQuery({ 
+    queryKey: ['readings'], 
+    queryFn: fetchReadings,
+    refetchInterval: isConnected ? false : 30000,
+  })
 
   const colors = useChartColors()
+  
+  const chartData = useMemo(() => {
+    return (analytics?.trends || []).map(t => ({
+      ...t,
+      date: new Date(t.bucket).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: granularity === 'day' ? 'numeric' : undefined,
+        year: granularity === 'year' ? 'numeric' : '2-digit'
+      })
+    }))
+  }, [analytics?.trends, granularity])
 
-  // Build chart data from readings (group by date)
-  const chartData = readings
-    ? Object.entries(
-        readings.reduce<Record<string, number>>((acc, r) => {
-          const date = new Date(r.timestamp).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-          })
-          acc[date] = (acc[date] ?? 0) + r.kwh
-          return acc
-        }, {})
-      )
-        .slice(-14)
-        .map(([date, kwh]) => ({ date, kwh }))
-    : []
+  const stats = analytics?.summary || { total_kwh: 0, certificates_issued: 0, certificates_retired: 0, active_meters: 0 }
 
   return (
+    <WalletGate>
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Analytics</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Energy generation and certificate trends.</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          {/* Range Selector */}
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-950">
+            {(['30d', '90d', 'ytd', 'all'] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium uppercase transition-colors ${
+                  range === r 
+                    ? 'bg-yellow-400 text-gray-900' 
+                    : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-900'
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Stat cards                                                           */}
-      {/* ------------------------------------------------------------------ */}
+          <div className="h-6 w-px bg-gray-200 dark:bg-gray-800" />
+
+          {/* Connection status */}
+          <div className="flex items-center gap-2">
+            {isConnected ? (
+              <span className="flex h-2 w-2 rounded-full bg-green-500" />
+            ) : (
+              <span className="flex h-2 w-2 rounded-full bg-gray-300" />
+            )}
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+              {isConnected ? 'Live' : 'History'}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* Stat cards */}
       <section aria-labelledby="stats-heading" className="mb-8">
-        <h2 id="stats-heading" className="sr-only">
-          Key statistics
-        </h2>
-
-        {statsError && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            Failed to load statistics.
-          </p>
+        <h2 id="stats-heading" className="sr-only">Key statistics</h2>
+        {analyticsError && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">Failed to load analytics.</p>
         )}
-
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {statsLoading ? (
-            <>
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-            </>
-          ) : stats ? (
-            <>
-              <StatCard
-                label="Total energy"
-                value={`${stats.total_kwh.toLocaleString()} kWh`}
-                icon={Zap}
-                description="All verified readings"
-              />
-              <StatCard
-                label="Certificates issued"
-                value={stats.certificates_issued.toLocaleString()}
-                icon={Award}
-                description="Minted on Stellar"
-              />
-              <StatCard
-                label="Certificates retired"
-                value={stats.certificates_retired.toLocaleString()}
-                icon={Leaf}
-                description="Permanently burned"
-              />
-              <StatCard
-                label="Active meters"
-                value={stats.active_meters.toLocaleString()}
-                icon={TrendingUp}
-                description="Reporting in last 24 h"
-              />
-            </>
-          ) : null}
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Charts                                                               */}
-      {/* ------------------------------------------------------------------ */}
-      <section aria-labelledby="charts-heading" className="mb-8">
-        <h2 id="charts-heading" className="sr-only">
-          Energy charts
-        </h2>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Area chart — daily kWh */}
-          {readingsLoading ? (
-            <ChartSkeleton title="Daily energy output" />
+          {analyticsLoading ? (
+            <><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /></>
           ) : (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Daily energy output (kWh)
-              </h3>
-              <div
-                role="img"
-                aria-label="Area chart showing daily energy output in kWh over the last 14 days"
-                className="h-48 w-full"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 11, fill: colors.text }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: colors.text }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: colors.tooltip.bg,
-                        border: `1px solid ${colors.tooltip.border}`,
-                        borderRadius: '8px',
-                        color: colors.tooltip.text,
-                        fontSize: '12px',
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="kwh"
-                      stroke={colors.area}
-                      fill={colors.areaFill}
-                      strokeWidth={2}
-                      name="kWh"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* Bar chart — verified vs unverified */}
-          {readingsLoading ? (
-            <ChartSkeleton title="Verification status" />
-          ) : (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Verification status by meter
-              </h3>
-              <div
-                role="img"
-                aria-label="Bar chart showing verified and unverified readings per meter"
-                className="h-48 w-full"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={
-                      readings
-                        ? Object.entries(
-                            readings.reduce<Record<string, { verified: number; unverified: number }>>(
-                              (acc, r) => {
-                                if (!acc[r.meter_id])
-                                  acc[r.meter_id] = { verified: 0, unverified: 0 }
-                                if (r.verified) acc[r.meter_id].verified++
-                                else acc[r.meter_id].unverified++
-                                return acc
-                              },
-                              {}
-                            )
-                          ).map(([meter, counts]) => ({ meter, ...counts }))
-                        : []
-                    }
-                    margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
-                    <XAxis
-                      dataKey="meter"
-                      tick={{ fontSize: 11, fill: colors.text }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: colors.text }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: colors.tooltip.bg,
-                        border: `1px solid ${colors.tooltip.border}`,
-                        borderRadius: '8px',
-                        color: colors.tooltip.text,
-                        fontSize: '12px',
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{ fontSize: '12px', color: colors.text }}
-                    />
-                    <Bar dataKey="verified" fill={colors.bar1} name="Verified" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="unverified" fill={colors.bar2} name="Unverified" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+            <>
+              <StatCard label="Energy Generated" value={`${stats.total_kwh.toLocaleString()} kWh`} icon={Zap} description={range === 'all' ? 'All time' : `Last ${range}`} />
+              <StatCard label="Certs Issued" value={stats.certificates_issued.toLocaleString()} icon={Award} description="Minted in period" />
+              <StatCard label="Certs Retired" value={stats.certificates_retired.toLocaleString()} icon={Leaf} description="Burned in period" />
+              <StatCard label="Active Meters" value={stats.active_meters.toLocaleString()} icon={TrendingUp} description="Reporting now" />
+            </>
           )}
         </div>
       </section>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Certificate metrics                                                  */}
-      {/* ------------------------------------------------------------------ */}
-      <section aria-labelledby="cert-heading" className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="cert-heading" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Certificate Metrics
-          </h2>
-          <a
-            href="/certificates"
-            className="text-sm text-yellow-600 hover:underline dark:text-yellow-400"
-          >
-            View full history →
-          </a>
-        </div>
-        {stats && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Issued</p>
-              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.certificates_issued.toLocaleString()}</p>
+      {/* Main Charts */}
+      <section className="mb-8 grid gap-6 lg:grid-cols-2">
+        {/* Generation Trend */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Generation trend</h3>
+              <p className="text-xs text-gray-500">kWh output over time</p>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Retired</p>
-              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.certificates_retired.toLocaleString()}</p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Active</p>
-              <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">
-                {(stats.certificates_issued - stats.certificates_retired).toLocaleString()}
-              </p>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Recent readings table                                                */}
-      {/* ------------------------------------------------------------------ */}
-      <section aria-labelledby="readings-heading">
-        <h2
-          id="readings-heading"
-          className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100"
-        >
-          Recent readings
-        </h2>
-
-        {readingsError && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            Failed to load readings.
-          </p>
-        )}
-
-        {/* Responsive table wrapper — prevents horizontal scroll on mobile */}
-        <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
-          <div className="overflow-x-auto">
-            <table
-              className="min-w-full divide-y divide-gray-200 bg-white text-sm dark:divide-gray-800 dark:bg-gray-900"
-              aria-label="Recent meter readings"
-              aria-busy={readingsLoading}
+            <button
+              onClick={() => exportCsv(analytics?.trends || [], 'generation-trends.csv')}
+              className="rounded-md border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400"
             >
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-800/50">
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-                  >
-                    Meter ID
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-                  >
-                    kWh
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-                  >
-                    Timestamp
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-                  >
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {readingsLoading ? (
-                  <>
-                    <TableRowSkeleton cols={4} />
-                    <TableRowSkeleton cols={4} />
-                    <TableRowSkeleton cols={4} />
-                    <TableRowSkeleton cols={4} />
-                    <TableRowSkeleton cols={4} />
-                  </>
-                ) : readings && readings.length > 0 ? (
-                  readings.slice(0, 20).map((r) => (
-                    <tr
-                      key={r.id}
-                      className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40"
-                    >
-                      <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">
-                        {r.meter_id}
-                      </td>
-                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100">
-                        {r.kwh}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                        {new Date(r.timestamp).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            r.verified
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          }`}
-                        >
-                          {r.verified ? 'Verified' : 'Pending'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
-                    >
-                      No readings found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+              <Download className="h-4 w-4" />
+            </button>
           </div>
+          <div className="h-64 w-full">
+            {analyticsLoading ? <ChartSkeleton /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: colors.text }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: colors.text }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: colors.tooltip.bg, border: `1px solid ${colors.tooltip.border}`, borderRadius: '8px', fontSize: '12px' }}
+                  />
+                  <Area type="monotone" dataKey="kwh" stroke={colors.area} fill={colors.areaFill} strokeWidth={2} name="kWh" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Issuance vs Retirement */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Certificates activity</h3>
+              <p className="text-xs text-gray-500">Issued vs retired trends</p>
+            </div>
+            <fieldset className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-gray-800">
+              {(['day', 'month'] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setGranularity(g)}
+                  className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase transition-colors ${
+                    granularity === g ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100' : 'text-gray-500'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </fieldset>
+          </div>
+          <div className="h-64 w-full">
+            {analyticsLoading ? <ChartSkeleton /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: colors.text }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: colors.text }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: colors.tooltip.bg, border: `1px solid ${colors.tooltip.border}`, borderRadius: '8px', fontSize: '12px' }}
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <Line type="monotone" dataKey="certs_issued" stroke={colors.line1} strokeWidth={2} dot={false} name="Issued" />
+                  <Line type="monotone" dataKey="certs_retired" stroke={colors.line2} strokeWidth={2} dot={false} name="Retired" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Per-Meter Breakdown */}
+      <section className="mb-8">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Per-meter performance</h2>
+          <button
+            onClick={() => exportCsv(analytics?.meter_stats || [], 'meter-performance.csv')}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-900"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </button>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+          <table className="min-w-full divide-y divide-gray-200 bg-white text-sm dark:divide-gray-800 dark:bg-gray-900">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-800/50">
+                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Meter</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Generation</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Readings</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Certs</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Share</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {analyticsLoading ? (
+                <><TableRowSkeleton cols={5} /><TableRowSkeleton cols={5} /><TableRowSkeleton cols={5} /></>
+              ) : analytics?.meter_stats.map((m) => (
+                <tr key={m.meter_id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                  <td className="px-6 py-4">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{m.meter_name}</div>
+                    <div className="text-[10px] font-mono text-gray-400">{m.meter_id}</div>
+                  </td>
+                  <td className="px-6 py-4 text-right font-semibold text-gray-900 dark:text-gray-100">{m.total_kwh.toLocaleString()} kWh</td>
+                  <td className="px-6 py-4 text-right text-gray-600 dark:text-gray-400">{m.reading_count.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right text-gray-600 dark:text-gray-400">{m.certs_generated.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                        <div 
+                          className="h-full bg-yellow-400" 
+                          style={{ width: `${(m.total_kwh / (stats.total_kwh || 1)) * 100}%` }} 
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-500">
+                        {((m.total_kwh / (stats.total_kwh || 1)) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Recent Activity */}
+      <section>
+        <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">Recent readings</h2>
+        <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+          <table className="min-w-full divide-y divide-gray-200 bg-white text-sm dark:divide-gray-800 dark:bg-gray-900">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {readingsLoading ? (
+                <><TableRowSkeleton cols={4} /><TableRowSkeleton cols={4} /></>
+              ) : readings?.slice(0, 10).map((r) => (
+                <tr key={r.id}>
+                  <td className="px-6 py-3 font-mono text-[10px] text-gray-500">{r.id}</td>
+                  <td className="px-6 py-3 text-gray-900 dark:text-gray-100 font-medium">{r.kwh.toFixed(3)} kWh</td>
+                  <td className="px-6 py-3 text-gray-500">{new Date(r.timestamp).toLocaleString()}</td>
+                  <td className="px-6 py-3 text-right">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${r.verified ? 'bg-green-100 text-green-700 dark:bg-green-900/30' : 'bg-yellow-100 text-yellow-700'}`}>
+                      {r.verified ? 'Verified' : 'Pending'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
+    </WalletGate>
   )
 }
