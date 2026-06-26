@@ -77,6 +77,8 @@ Built with **Soroban SDK 23.1.0** and **OpenZeppelin Stellar v0.5.1**.
 
 ## Quick Start
 
+> **New to the project?** See the [Developer Onboarding Guide](docs/ONBOARDING.md) for a step-by-step walkthrough from prerequisites to a live meter reading simulation.
+
 ### Prerequisites
 
 - Node.js v22+
