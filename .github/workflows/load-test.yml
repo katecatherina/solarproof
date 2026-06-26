@@ -8,16 +8,28 @@ on:
         required: true
         default: 'https://solarproof-staging.vercel.app'
       meter_id:
-        description: 'Seeded meter UUID'
+        description: 'Seeded meter UUID (leave blank for placeholder mode)'
         required: false
         default: ''
+      scenario:
+        description: 'Test scenario: baseline (100 VUs, p95 < 500ms) or breakpoint (ramp to breaking point)'
+        required: false
+        default: 'baseline'
+        type: choice
+        options:
+          - baseline
+          - breakpoint
+  # Run baseline weekly against staging to catch regressions
+  schedule:
+    - cron: '0 4 * * 1'  # Every Monday at 04:00 UTC
 
 jobs:
   load-test:
-    name: k6 load test (100 VUs, 60 s)
+    name: k6 load test (${{ github.event.inputs.scenario || 'baseline' }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install k6
         run: |
           sudo gpg -k
@@ -28,8 +40,19 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
             | sudo tee /etc/apt/sources.list.d/k6.list
           sudo apt-get update && sudo apt-get install -y k6
+
       - name: Run load test
         run: |
           k6 run tests/load/readings.js \
-            -e API_URL=${{ github.event.inputs.api_url }} \
-            -e METER_ID=${{ github.event.inputs.meter_id || 'placeholder' }}
+            -e API_URL=${{ github.event.inputs.api_url || 'https://solarproof-staging.vercel.app' }} \
+            -e METER_ID=${{ github.event.inputs.meter_id || '00000000-0000-0000-0000-000000000001' }} \
+            -e SCENARIO=${{ github.event.inputs.scenario || 'baseline' }}
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-${{ github.event.inputs.scenario || 'baseline' }}-${{ github.run_id }}
+          path: '*.json'
+          if-no-files-found: ignore
+          retention-days: 30

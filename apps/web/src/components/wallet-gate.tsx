@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Wallet } from 'lucide-react'
 import { useWallet } from '@/hooks/useWallet'
+import { useTranslations } from 'next-intl'
 
 /**
  * Wraps protected pages. Shows a connect-wallet prompt until a wallet is
@@ -14,6 +15,7 @@ import { useWallet } from '@/hooks/useWallet'
  *   }
  */
 export function WalletGate({ children }: { children: React.ReactNode }) {
+  const t = useTranslations('walletGate')
   const { connected, loading, connect } = useWallet()
   const [mounted, setMounted] = useState(false)
 
@@ -33,10 +35,10 @@ export function WalletGate({ children }: { children: React.ReactNode }) {
         </div>
         <div className="space-y-2">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Wallet required
+            {t('title')}
           </h2>
           <p className="max-w-sm text-sm text-gray-600 dark:text-gray-400">
-            Connect your Freighter wallet to access this page.
+            {t('description')}
           </p>
         </div>
         <button
@@ -44,7 +46,7 @@ export function WalletGate({ children }: { children: React.ReactNode }) {
           className="inline-flex items-center gap-2 rounded-md bg-yellow-400 px-5 py-2.5 text-sm font-medium text-gray-900 transition-colors hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2"
         >
           <Wallet className="h-4 w-4" aria-hidden="true" />
-          Connect wallet
+          {t('connect')}
         </button>
       </div>
     )

@@ -34,3 +34,9 @@ name = "fuzz_vote"
 path = "fuzz_targets/fuzz_vote.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_governance"
+path = "fuzz_targets/fuzz_governance.rs"
+test = false
+doc = false

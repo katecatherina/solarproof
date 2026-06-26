@@ -84,7 +84,7 @@ export async function diagnoseMintFailure(
   const db = createServiceClient()
   await db
     .from('readings')
-    .update({ mint_diagnosis: diagnosis as unknown as Record<string, unknown> })
+    .update({ mint_diagnosis: diagnosis as unknown as import('@/lib/database.types').Json })
     .eq('id', readingId)
 
   void fireWebhook(cooperativeId, 'mint_failed', {
