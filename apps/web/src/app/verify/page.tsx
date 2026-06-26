@@ -130,7 +130,9 @@ export default function VerifyPage() {
       toast({ variant: 'success', title: 'Certificate verified', description: 'Full chain of custody confirmed.' })
     } catch {
       setError('Network error — please try again.')
+      trackEvent('verify_error', { status: 0 })
     } finally {
+      endTiming()
       setLoading(false)
     }
   }
