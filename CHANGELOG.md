@@ -1,3 +1,9 @@
+## [1.21.0](https://github.com/AnnabelJoe/solarproof/compare/v1.20.0...v1.21.0) (2026-06-26)
+
+### Features
+
+* add secure contract deployment script for IDs and secrets ([#565](https://github.com/AnnabelJoe/solarproof/issues/565)) ([c2b0348](https://github.com/AnnabelJoe/solarproof/commit/c2b03485e432f0d62976d71bebfc5b181b468588))
+
 ## [1.20.0](https://github.com/AnnabelJoe/solarproof/compare/v1.19.0...v1.20.0) (2026-06-26)
 
 ### Features
