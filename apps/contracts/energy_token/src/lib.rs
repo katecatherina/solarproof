@@ -1,8 +1,8 @@
 //! # Energy Token (`energy-token`)
 //!
 //! SEP-41 fungible certificate token representing verified renewable energy.
-//! **1 token = 1 kWh** of generation that has been cryptographically anchored
-//! on-chain via the `audit_registry` contract.
+//! **1000 token units = 1 kWh** (decimals = 3; 1 unit = 0.001 kWh).
+//! Generation is cryptographically anchored on-chain via the `audit_registry` contract.
 //!
 //! ## Roles
 //! | Role | Description |
@@ -18,6 +18,7 @@
 
 #![no_std]
 
+#[allow(deprecated)]
 use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String};
 
 // ---------------------------------------------------------------------------
@@ -33,6 +34,8 @@ pub enum DataKey {
     Paused,
     /// Allowance: (from, spender) -> i128
     Allowance(Address, Address),
+    /// Retired: address -> bool
+    Retired(Address),
 }
 
 #[contract]
@@ -40,7 +43,14 @@ pub struct EnergyToken;
 
 #[contractimpl]
 impl EnergyToken {
-    /// Initialise the contract.
+    /// Initialise the contract. Must be called exactly once after deployment.
+    ///
+    /// # Arguments
+    /// * `admin`  — address that can rotate the `minter` via [`set_minter`].
+    /// * `minter` — the only address authorised to call [`mint`].
+    ///
+    /// # Panics
+    /// Panics with `"already initialized"` if called more than once.
     pub fn initialize(env: Env, admin: Address, minter: Address) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("already initialized");
@@ -54,20 +64,30 @@ impl EnergyToken {
 
     // ── SEP-41 metadata ─────────────────────────────────────────────────────
 
+    /// Returns the human-readable token name: `"SolarProof kWh"`.
     pub fn name(env: Env) -> String {
         String::from_str(&env, "SolarProof kWh")
     }
 
+    /// Returns the token ticker symbol: `"SKWH"`.
     pub fn symbol(env: Env) -> String {
         String::from_str(&env, "SKWH")
     }
 
+    /// Returns the number of decimal places: `3` (milli-kWh precision).
+    /// 1 token unit = 0.001 kWh; 1000 units = 1 kWh.
     pub fn decimals(_env: Env) -> u32 {
-        7
+        3
     }
 
     // ── SEP-41 balance / transfer ────────────────────────────────────────────
 
+    /// Returns the token balance of `account`. Returns `0` for unknown accounts.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let bal = client.balance(&holder_address); // e.g. 125_000_000 (12.5 kWh in stroops)
+    /// ```
     pub fn balance(env: Env, account: Address) -> i128 {
         env.storage()
             .persistent()
@@ -75,10 +95,29 @@ impl EnergyToken {
             .unwrap_or(0)
     }
 
+    /// Transfer `amount` tokens from `from` to `to`.
+    ///
+    /// # Arguments
+    /// * `from`   — sender (must authorise).
+    /// * `to`     — recipient.
+    /// * `amount` — number of tokens to transfer (must be positive).
+    ///
+    /// # Authorization
+    /// Requires `from` authorisation.
+    ///
+    /// # Panics
+    /// * `"amount must be positive"` if `amount <= 0`.
+    /// * `"contract is paused"` if the contract is paused.
+    /// * `"token is retired"` if `from` has been retired.
+    /// * `"insufficient balance"` if `from` has fewer tokens than `amount`.
+    ///
+    /// # Events
+    /// Emits `(topic: "transfer", data: (from, to, amount))`.
     pub fn transfer(env: Env, from: Address, to: Address, amount: i128) {
         from.require_auth();
         assert!(amount > 0, "amount must be positive");
         Self::require_not_paused(&env);
+        Self::require_not_retired(&env, &from);
         Self::move_balance(&env, &from, &to, amount);
         env.events()
             .publish((symbol_short!("transfer"),), (from, to, amount));
@@ -87,6 +126,7 @@ impl EnergyToken {
     // ── SEP-41 allowance / approve ───────────────────────────────────────────
 
     /// Returns the amount `spender` is allowed to spend on behalf of `from`.
+    /// Returns `0` if no allowance has been set.
     pub fn allowance(env: Env, from: Address, spender: Address) -> i128 {
         env.storage()
             .persistent()
@@ -95,10 +135,23 @@ impl EnergyToken {
     }
 
     /// Approve `spender` to spend up to `amount` tokens from `from`.
+    /// Setting `amount` to `0` revokes the allowance.
+    ///
+    /// # Arguments
+    /// * `from`    — token owner (must authorise).
+    /// * `spender` — address being granted the allowance.
+    /// * `amount`  — maximum tokens `spender` may spend (must be ≥ 0).
+    /// * `_expiration_ledger` — ledger number when the allowance expires.
     ///
     /// # Authorization
     /// Requires `from` authorisation.
-    pub fn approve(env: Env, from: Address, spender: Address, amount: i128) {
+    ///
+    /// # Panics
+    /// * `"amount must be non-negative"` if `amount < 0`.
+    ///
+    /// # Events
+    /// Emits `(topic: "approve", data: (from, spender, amount))`.
+    pub fn approve(env: Env, from: Address, spender: Address, amount: i128, _expiration_ledger: u32) {
         from.require_auth();
         assert!(amount >= 0, "amount must be non-negative");
         env.storage()
@@ -110,12 +163,29 @@ impl EnergyToken {
 
     /// Transfer `amount` tokens from `from` to `to` using caller's allowance.
     ///
+    /// # Arguments
+    /// * `spender` — address spending the allowance (must authorise).
+    /// * `from`    — token owner whose allowance is consumed.
+    /// * `to`      — recipient.
+    /// * `amount`  — number of tokens to transfer (must be positive).
+    ///
     /// # Authorization
     /// Requires `spender` (caller) authorisation.
+    ///
+    /// # Panics
+    /// * `"amount must be positive"` if `amount <= 0`.
+    /// * `"contract is paused"` if the contract is paused.
+    /// * `"token is retired"` if `from` has been retired.
+    /// * `"insufficient allowance"` if `spender`'s allowance is less than `amount`.
+    /// * `"insufficient balance"` if `from` has fewer tokens than `amount`.
+    ///
+    /// # Events
+    /// Emits `(topic: "transfer", data: (from, to, amount))`.
     pub fn transfer_from(env: Env, spender: Address, from: Address, to: Address, amount: i128) {
         spender.require_auth();
         assert!(amount > 0, "amount must be positive");
         Self::require_not_paused(&env);
+        Self::require_not_retired(&env, &from);
         Self::spend_allowance(&env, &from, &spender, amount);
         Self::move_balance(&env, &from, &to, amount);
         env.events()
@@ -124,8 +194,22 @@ impl EnergyToken {
 
     /// Burn `amount` tokens from `from` using caller's allowance.
     ///
+    /// # Arguments
+    /// * `spender` — address spending the allowance (must authorise).
+    /// * `from`    — token owner whose tokens are burned.
+    /// * `amount`  — number of tokens to burn (must be positive).
+    ///
     /// # Authorization
     /// Requires `spender` (caller) authorisation.
+    ///
+    /// # Panics
+    /// * `"amount must be positive"` if `amount <= 0`.
+    /// * `"contract is paused"` if the contract is paused.
+    /// * `"insufficient allowance"` if `spender`'s allowance is less than `amount`.
+    /// * `"insufficient balance"` if `from` has fewer tokens than `amount`.
+    ///
+    /// # Events
+    /// Emits `(topic: "burn", data: (from, amount))`.
     pub fn burn_from(env: Env, spender: Address, from: Address, amount: i128) {
         spender.require_auth();
         assert!(amount > 0, "amount must be positive");
@@ -139,6 +223,24 @@ impl EnergyToken {
 
     // ── Mint / burn (privileged) ─────────────────────────────────────────────
 
+    /// Mint `amount` new tokens to `to`. Only the registered `minter` may call this.
+    ///
+    /// # Arguments
+    /// * `to`     — recipient address.
+    /// * `amount` — number of tokens to mint (must be positive).
+    ///
+    /// # Authorization
+    /// Requires `minter` authorisation.
+    ///
+    /// # Panics
+    /// * `"not initialized"` if the contract has not been initialised.
+    /// * `"amount must be positive"` if `amount <= 0`.
+    /// * `"contract is paused"` if the contract is paused.
+    /// * `"overflow: balance"` if minting would overflow `to`'s balance.
+    /// * `"overflow: total_minted"` if minting would overflow the total supply counter.
+    ///
+    /// # Events
+    /// Emits `(topic: "mint", data: (to, amount))`.
     pub fn mint(env: Env, to: Address, amount: i128) {
         let minter: Address = env
             .storage()
@@ -151,7 +253,9 @@ impl EnergyToken {
 
         let key = (symbol_short!("balance"), to.clone());
         let bal: i128 = env.storage().persistent().get(&key).unwrap_or(0);
-        let new_bal = bal.checked_add(amount).unwrap_or_else(|| panic!("overflow: balance"));
+        let new_bal = bal
+            .checked_add(amount)
+            .unwrap_or_else(|| panic!("overflow: balance"));
         env.storage().persistent().set(&key, &new_bal);
 
         let total: i128 = env
@@ -162,20 +266,45 @@ impl EnergyToken {
         let new_total = total
             .checked_add(amount)
             .unwrap_or_else(|| panic!("overflow: total_minted"));
-        env.storage().instance().set(&DataKey::TotalMinted, &new_total);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalMinted, &new_total);
 
         env.events().publish((symbol_short!("mint"),), (to, amount));
     }
 
+    /// Burn `amount` tokens from `from`. The token holder calls this directly.
+    ///
+    /// # Arguments
+    /// * `from`   — address whose tokens are burned (must authorise).
+    /// * `amount` — number of tokens to burn (must be positive).
+    ///
+    /// # Authorization
+    /// Requires `from` authorisation.
+    ///
+    /// # Panics
+    /// * `"amount must be positive"` if `amount <= 0`.
+    /// * `"contract is paused"` if the contract is paused.
+    /// * `"insufficient balance"` if `from` has fewer tokens than `amount`.
+    ///
+    /// # Events
+    /// Emits `(topic: "burn", data: (from, amount))`.
     pub fn burn(env: Env, from: Address, amount: i128) {
         from.require_auth();
         assert!(amount > 0, "amount must be positive");
         Self::require_not_paused(&env);
         Self::deduct_balance(&env, &from, amount);
         Self::add_burned(&env, amount);
-        env.events().publish((symbol_short!("burn"),), (from, amount));
+        env.events()
+            .publish((symbol_short!("burn"),), (from, amount));
     }
 
+    /// Returns the current circulating supply: `total_minted - total_burned`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let supply = client.total_supply(); // tokens currently in circulation
+    /// ```
     pub fn total_supply(env: Env) -> i128 {
         let minted: i128 = env
             .storage()
@@ -190,6 +319,16 @@ impl EnergyToken {
         minted - burned
     }
 
+    /// Replace the authorised minter address. Admin-only.
+    ///
+    /// # Arguments
+    /// * `new_minter` — address that will be authorised to call [`mint`].
+    ///
+    /// # Authorization
+    /// Requires `admin` authorisation.
+    ///
+    /// # Panics
+    /// * `"not initialized"` if the contract has not been initialised.
     pub fn set_minter(env: Env, new_minter: Address) {
         let admin: Address = env
             .storage()
@@ -200,11 +339,57 @@ impl EnergyToken {
         env.storage().instance().set(&DataKey::Minter, &new_minter);
     }
 
+    /// Returns the admin address.
+    ///
+    /// # Panics
+    /// * `"not initialized"` if the contract has not been initialised.
     pub fn admin(env: Env) -> Address {
         env.storage()
             .instance()
             .get(&DataKey::Admin)
             .expect("not initialized")
+    }
+
+    /// Retire `amount` tokens held by `account`, permanently marking the address as retired if full balance is retired.
+    ///
+    /// Burns the specified amount.
+    ///
+    /// # Arguments
+    /// * `account` — address retiring their tokens (must authorise).
+    /// * `amount`  — number of tokens to retire.
+    /// * `reason`  — human-readable retirement reason (e.g. `"REC compliance"`).
+    ///
+    /// # Panics
+    /// * `"already retired"` if `account` is already retired.
+    /// * `"insufficient balance"` if `account` holds fewer tokens than `amount`.
+    ///
+    /// # Events
+    /// Emits `(topic: "retire", data: (account, amount, reason))`.
+    pub fn retire(env: Env, account: Address, amount: i128, reason: String) {
+        account.require_auth();
+        assert!(
+            !env.storage()
+                .persistent()
+                .get::<_, bool>(&DataKey::Retired(account.clone()))
+                .unwrap_or(false),
+            "already retired"
+        );
+        let key = (symbol_short!("balance"), account.clone());
+        let bal: i128 = env.storage().persistent().get(&key).unwrap_or(0);
+        assert!(bal >= amount, "insufficient balance");
+        assert!(amount > 0, "amount must be positive");
+
+        env.storage().persistent().set(&key, &(bal - amount));
+
+        if bal == amount {
+            env.storage()
+                .persistent()
+                .set(&DataKey::Retired(account.clone()), &true);
+        }
+
+        Self::add_burned(&env, amount);
+        env.events()
+            .publish((symbol_short!("retire"),), (account, amount, reason));
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
@@ -218,14 +403,28 @@ impl EnergyToken {
         assert!(!paused, "contract is paused");
     }
 
+    fn require_not_retired(env: &Env, account: &Address) {
+        let retired: bool = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Retired(account.clone()))
+            .unwrap_or(false);
+        assert!(!retired, "token is retired");
+    }
+
     fn move_balance(env: &Env, from: &Address, to: &Address, amount: i128) {
+        if from == to {
+            return;
+        }
         let fk = (symbol_short!("balance"), from.clone());
         let fb: i128 = env.storage().persistent().get(&fk).expect("no balance");
         assert!(fb >= amount, "insufficient balance");
         let tk = (symbol_short!("balance"), to.clone());
         let tb: i128 = env.storage().persistent().get(&tk).unwrap_or(0);
         env.storage().persistent().set(&fk, &(fb - amount));
-        let new_tb = tb.checked_add(amount).unwrap_or_else(|| panic!("overflow: recipient balance"));
+        let new_tb = tb
+            .checked_add(amount)
+            .unwrap_or_else(|| panic!("overflow: recipient balance"));
         env.storage().persistent().set(&tk, &new_tb);
     }
 
@@ -245,7 +444,9 @@ impl EnergyToken {
         let new_total = total
             .checked_add(amount)
             .unwrap_or_else(|| panic!("overflow: total_burned"));
-        env.storage().instance().set(&DataKey::TotalBurned, &new_total);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalBurned, &new_total);
     }
 
     fn spend_allowance(env: &Env, from: &Address, spender: &Address, amount: i128) {
@@ -263,7 +464,7 @@ impl EnergyToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env};
+    use soroban_sdk::{testutils::Address as _, Env, IntoVal};
 
     fn setup() -> (Env, EnergyTokenClient<'static>) {
         let env = Env::default();
@@ -287,6 +488,35 @@ mod tests {
         client.burn(&user, &400_i128);
         assert_eq!(client.total_supply(), 600_i128);
         assert_eq!(client.balance(&user), 600_i128);
+    }
+
+    #[test]
+    fn test_admin_and_minter_assignment() {
+        let (env, client) = setup();
+        let admin = client.admin();
+        assert_eq!(client.admin(), admin);
+        let minter = Address::generate(&env);
+        client.set_minter(&admin, &minter);
+        // Verify the new minter can be used to mint
+        client.mint(&Address::generate(&env), &500_i128);
+        assert_eq!(client.total_supply(), 500_i128);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_set_minter_requires_admin() {
+        let (env, client) = setup();
+        let non_admin = Address::generate(&env);
+        let new_minter = Address::generate(&env);
+        client.set_minter(&non_admin, &new_minter);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_mint_requires_minter() {
+        let (env, client) = setup();
+        let unauthorized = Address::generate(&env);
+        client.mint(&unauthorized, &100_i128);
     }
 
     #[test]
@@ -360,7 +590,7 @@ mod tests {
         let (env, client) = setup();
         assert_eq!(client.name(), String::from_str(&env, "SolarProof kWh"));
         assert_eq!(client.symbol(), String::from_str(&env, "SKWH"));
-        assert_eq!(client.decimals(), 7);
+        assert_eq!(client.decimals(), 3);
     }
 
     #[test]
@@ -369,7 +599,7 @@ mod tests {
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
         assert_eq!(client.allowance(&owner, &spender), 0);
-        client.approve(&owner, &spender, &500_i128);
+        client.approve(&owner, &spender, &500_i128, &1000_u32);
         assert_eq!(client.allowance(&owner, &spender), 500_i128);
     }
 
@@ -380,7 +610,7 @@ mod tests {
         let spender = Address::generate(&env);
         let recipient = Address::generate(&env);
         client.mint(&owner, &1000_i128);
-        client.approve(&owner, &spender, &400_i128);
+        client.approve(&owner, &spender, &400_i128, &1000_u32);
         client.transfer_from(&spender, &owner, &recipient, &300_i128);
         assert_eq!(client.balance(&owner), 700_i128);
         assert_eq!(client.balance(&recipient), 300_i128);
@@ -396,7 +626,7 @@ mod tests {
         let spender = Address::generate(&env);
         let recipient = Address::generate(&env);
         client.mint(&owner, &1000_i128);
-        client.approve(&owner, &spender, &100_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
         client.transfer_from(&spender, &owner, &recipient, &200_i128);
     }
 
@@ -406,7 +636,7 @@ mod tests {
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
         client.mint(&owner, &1000_i128);
-        client.approve(&owner, &spender, &600_i128);
+        client.approve(&owner, &spender, &600_i128, &1000_u32);
         client.burn_from(&spender, &owner, &400_i128);
         assert_eq!(client.balance(&owner), 600_i128);
         assert_eq!(client.total_supply(), 600_i128);
@@ -420,7 +650,7 @@ mod tests {
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
         client.mint(&owner, &1000_i128);
-        client.approve(&owner, &spender, &50_i128);
+        client.approve(&owner, &spender, &50_i128, &1000_u32);
         client.burn_from(&spender, &owner, &100_i128);
     }
 
@@ -429,8 +659,8 @@ mod tests {
         let (env, client) = setup();
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
-        client.approve(&owner, &spender, &500_i128);
-        client.approve(&owner, &spender, &100_i128);
+        client.approve(&owner, &spender, &500_i128, &1000_u32);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
         assert_eq!(client.allowance(&owner, &spender), 100_i128);
     }
 
@@ -439,8 +669,8 @@ mod tests {
         let (env, client) = setup();
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
-        client.approve(&owner, &spender, &500_i128);
-        client.approve(&owner, &spender, &0_i128);
+        client.approve(&owner, &spender, &500_i128, &1000_u32);
+        client.approve(&owner, &spender, &0_i128, &1000_u32);
         assert_eq!(client.allowance(&owner, &spender), 0);
     }
 
@@ -545,6 +775,27 @@ mod tests {
         client.burn(&user, &1_i128);
     }
 
+    // retire
+
+    #[test]
+    fn test_retire_reduces_supply_and_emits_event() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &1000_i128);
+        client.retire(&user, &300_i128, &String::from_str(&env, "retire"));
+        assert_eq!(client.balance(&user), 700_i128);
+        assert_eq!(client.total_supply(), 700_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_retire_zero_panics() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &100_i128);
+        client.retire(&user, &0_i128, &String::from_str(&env, "retire"));
+    }
+
     // approve
 
     #[test]
@@ -553,7 +804,7 @@ mod tests {
         let (env, client) = setup();
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
-        client.approve(&owner, &spender, &-1_i128);
+        client.approve(&owner, &spender, &-1_i128, &1000_u32);
     }
 
     // transfer_from
@@ -566,7 +817,7 @@ mod tests {
         let spender = Address::generate(&env);
         let recipient = Address::generate(&env);
         client.mint(&owner, &100_i128);
-        client.approve(&owner, &spender, &100_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
         client.transfer_from(&spender, &owner, &recipient, &0_i128);
     }
 
@@ -579,7 +830,7 @@ mod tests {
         let owner = Address::generate(&env);
         let spender = Address::generate(&env);
         client.mint(&owner, &100_i128);
-        client.approve(&owner, &spender, &100_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
         client.burn_from(&spender, &owner, &0_i128);
     }
 
@@ -602,7 +853,56 @@ mod tests {
         assert_eq!(client.balance(&user), 1_i128);
     }
 
-    // admin
+    // pause/unpause
+
+    #[test]
+    #[should_panic(expected = "contract is paused")]
+    fn test_pause_blocks_mint() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let user = Address::generate(&env);
+        client.initialize(&admin, &minter);
+        client.pause();
+        client.mint(&user, &100_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "contract is paused")]
+    fn test_pause_blocks_transfer() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let owner = Address::generate(&env);
+        let recipient = Address::generate(&env);
+        client.initialize(&admin, &minter);
+        client.mint(&owner, &100_i128);
+        client.pause();
+        client.transfer(&owner, &recipient, &10_i128);
+    }
+
+    #[test]
+    fn test_unpause_allows_operations_again() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let user = Address::generate(&env);
+        client.initialize(&admin, &minter);
+        client.pause();
+        client.unpause();
+        assert!(!client.paused());
+        client.mint(&user, &100_i128);
+        assert_eq!(client.balance(&user), 100_i128);
+    }
 
     #[test]
     fn test_admin_returns_correct_address() {
@@ -615,4 +915,310 @@ mod tests {
         client.initialize(&admin, &minter);
         assert_eq!(client.admin(), admin);
     }
+
+    // ── access control tests ─────────────────────────────────────────────────
+
+    /// Unauthorized caller cannot mint — auth is required from the registered minter.
+    /// Soroban enforces this: calling without the minter's auth causes a host error.
+    #[test]
+    #[should_panic]
+    fn test_mint_unauthorized_caller_panics() {
+        let env = Env::default();
+        // Do NOT mock_all_auths — real auth enforcement
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let recipient = Address::generate(&env);
+
+        // Initialize: mock only the initialize call
+        env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &admin,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &id,
+                fn_name: "initialize",
+                args: (&admin, &minter).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.initialize(&admin, &minter);
+
+        // No auth mocked for mint — must panic (host auth failure)
+        client.mint(&recipient, &100_i128);
+    }
+
+    /// Authorized minter can mint successfully.
+    #[test]
+    fn test_mint_succeeds_with_minter_auth() {
+        let env = Env::default();
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let recipient = Address::generate(&env);
+
+        env.mock_auths(&[
+            soroban_sdk::testutils::MockAuth {
+                address: &admin,
+                invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                    contract: &id,
+                    fn_name: "initialize",
+                    args: (&admin, &minter).into_val(&env),
+                    sub_invokes: &[],
+                },
+            },
+            soroban_sdk::testutils::MockAuth {
+                address: &minter,
+                invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                    contract: &id,
+                    fn_name: "mint",
+                    args: (&recipient, &500_i128).into_val(&env),
+                    sub_invokes: &[],
+                },
+            },
+        ]);
+        client.initialize(&admin, &minter);
+        client.mint(&recipient, &500_i128);
+        assert_eq!(client.balance(&recipient), 500_i128);
+    }
+
+    /// Non-admin cannot call set_minter — host auth failure causes a panic.
+    #[test]
+    #[should_panic]
+    fn test_set_minter_unauthorized_caller_panics() {
+        let env = Env::default();
+        let id = env.register(EnergyToken, ());
+        let client = EnergyTokenClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let minter = Address::generate(&env);
+        let new_minter = Address::generate(&env);
+
+        env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &admin,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &id,
+                fn_name: "initialize",
+                args: (&admin, &minter).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.initialize(&admin, &minter);
+
+        // No auth mocked for set_minter — must panic
+        client.set_minter(&new_minter);
+    }
+
+    // ── retire tests ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_retire_burns_balance_and_updates_supply() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &1000_i128);
+        client.retire(&user, &1000_i128, &String::from_str(&env, "REC compliance"));
+        assert_eq!(client.balance(&user), 0);
+        assert_eq!(client.total_supply(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "already retired")]
+    fn test_retire_double_retire_panics() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &500_i128);
+        client.retire(&user, &500_i128, &String::from_str(&env, "first"));
+        // mint again so balance > 0, but retired flag is set
+        client.mint(&user, &100_i128);
+        client.retire(&user, &100_i128, &String::from_str(&env, "second"));
+    }
+
+    #[test]
+    #[should_panic(expected = "token is retired")]
+    fn test_transfer_from_retired_address_panics() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let recipient = Address::generate(&env);
+        client.mint(&user, &1000_i128);
+        client.retire(&user, &1000_i128, &String::from_str(&env, "REC compliance"));
+        // mint again so balance > 0, but retired flag blocks transfer
+        client.mint(&user, &100_i128);
+        client.transfer(&user, &recipient, &100_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_retire_zero_balance_panics() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.retire(&user, &0_i128, &String::from_str(&env, "empty"));
+    }
+
+    // SEP-41 compliance tests
+    #[test]
+    fn test_approve_and_allowance() {
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender = Address::generate(&env);
+        client.approve(&owner, &spender, &500_i128, &1000_u32);
+        assert_eq!(client.allowance(&owner, &spender), 500_i128);
+    }
+
+    #[test]
+    fn test_transfer_from() {
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender = Address::generate(&env);
+        let recipient = Address::generate(&env);
+        client.mint(&owner, &1000_i128);
+        client.approve(&owner, &spender, &300_i128, &1000_u32);
+        client.transfer_from(&spender, &owner, &recipient, &200_i128);
+        assert_eq!(client.balance(&owner), 800_i128);
+        assert_eq!(client.balance(&recipient), 200_i128);
+        assert_eq!(client.allowance(&owner, &spender), 100_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "insufficient allowance")]
+    fn test_transfer_from_exceeds_allowance() {
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender = Address::generate(&env);
+        let recipient = Address::generate(&env);
+        client.mint(&owner, &1000_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
+        client.transfer_from(&spender, &owner, &recipient, &200_i128);
+    }
+
+    #[test]
+    fn test_approve_zero_revokes() {
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender = Address::generate(&env);
+        client.approve(&owner, &spender, &500_i128, &1000_u32);
+        client.approve(&owner, &spender, &0_i128, &0_u32);
+        assert_eq!(client.allowance(&owner, &spender), 0_i128);
+    }
+
+    #[test]
+    fn test_sep41_name_symbol_decimals() {
+        let (env, client) = setup();
+        assert_eq!(client.name(), String::from_str(&env, "SolarProof kWh"));
+        assert_eq!(client.symbol(), String::from_str(&env, "SKWH"));
+        assert_eq!(client.decimals(), 3_u32);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_mint_zero_rejected() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &0_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_mint_negative_rejected() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &-1_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "overflow: balance")]
+    fn test_mint_overflow_rejected() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        // Fill balance to i128::MAX - 1
+        client.mint(&user, &(i128::MAX - 1));
+        // This should overflow
+        client.mint(&user, &2_i128);
+    }
+
+    #[test]
+    fn test_mint_boundary_max_minus_one() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &(i128::MAX - 1));
+        assert_eq!(client.balance(&user), i128::MAX - 1);
+    }
+
+    #[test]
+    fn test_mint_amount_one() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &1_i128);
+        assert_eq!(client.balance(&user), 1_i128);
+    }
+
+    // ── event emission tests (#330) ──────────────────────────────────────────
+
+    #[test]
+    fn test_mint_emits_event() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &500_i128);
+        let events = env.events().all();
+        // Find the mint event: topic = ("mint",), data = (to, amount)
+        let mint_event = events.iter().find(|(_, topics, _)| {
+            topics == &soroban_sdk::vec![&env, soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(&symbol_short!("mint"), &env)]
+        });
+        assert!(mint_event.is_some(), "mint event not emitted");
+        let (_, _, data) = mint_event.unwrap();
+        let (to, amount): (Address, i128) = soroban_sdk::FromVal::from_val(&env, &data);
+        assert_eq!(to, user);
+        assert_eq!(amount, 500_i128);
+    }
+
+    #[test]
+    fn test_transfer_emits_event() {
+        let (env, client) = setup();
+        let a = Address::generate(&env);
+        let b = Address::generate(&env);
+        client.mint(&a, &1000_i128);
+        env.events().all(); // clear
+        client.transfer(&a, &b, &300_i128);
+        let events = env.events().all();
+        let transfer_event = events.iter().find(|(_, topics, _)| {
+            topics == &soroban_sdk::vec![&env, soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(&symbol_short!("transfer"), &env)]
+        });
+        assert!(transfer_event.is_some(), "transfer event not emitted");
+        let (_, _, data) = transfer_event.unwrap();
+        let (from, to, amount): (Address, Address, i128) = soroban_sdk::FromVal::from_val(&env, &data);
+        assert_eq!(from, a);
+        assert_eq!(to, b);
+        assert_eq!(amount, 300_i128);
+    }
+
+    #[test]
+    fn test_retire_emits_event() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &1000_i128);
+        client.retire(&user, &String::from_str(&env, "REC compliance"));
+        let events = env.events().all();
+        let retire_event = events.iter().find(|(_, topics, _)| {
+            topics == &soroban_sdk::vec![&env, soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(&symbol_short!("retire"), &env)]
+        });
+        assert!(retire_event.is_some(), "retire event not emitted");
+    }
+
+    #[test]
+    fn test_burn_emits_event() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &1000_i128);
+        client.burn(&user, &200_i128);
+        let events = env.events().all();
+        let burn_event = events.iter().find(|(_, topics, _)| {
+            topics == &soroban_sdk::vec![&env, soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(&symbol_short!("burn"), &env)]
+        });
+        assert!(burn_event.is_some(), "burn event not emitted");
+        let (_, _, data) = burn_event.unwrap();
+        let (from, amount): (Address, i128) = soroban_sdk::FromVal::from_val(&env, &data);
+        assert_eq!(from, user);
+        assert_eq!(amount, 200_i128);
+    }
 }
+
+#[cfg(test)]
+mod overflow_tests;
