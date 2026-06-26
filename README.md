@@ -119,6 +119,16 @@ docker compose up
 
 The web app will be available at http://localhost:3000.
 
+All three services include health checks:
+
+| Service | Health check | Endpoint / command |
+|---|---|---|
+| `web` | HTTP poll | `GET /api/health` every 30s |
+| `supabase-db` | pg_isready | `pg_isready -U postgres` every 10s |
+| `redis` | CLI ping | `redis-cli ping` every 10s |
+
+The `web` service waits for both `supabase-db` and `redis` to be healthy before starting (`depends_on: condition: service_healthy`).
+
 Data is persisted in named Docker volumes (`supabase_data`, `redis_data`) so it survives container restarts.
 
 To stop and remove containers (volumes are kept):
