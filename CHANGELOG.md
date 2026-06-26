@@ -1,3 +1,15 @@
+## [1.23.0](https://github.com/AnnabelJoe/solarproof/compare/v1.22.0...v1.23.0) (2026-06-26)
+
+### Features
+
+* **#575:** add deploy-time smoke test after production deployment ([eff96a8](https://github.com/AnnabelJoe/solarproof/commit/eff96a875211379ec6321bae6620c8f90aebc917)), closes [#575](https://github.com/AnnabelJoe/solarproof/issues/575) [#575](https://github.com/AnnabelJoe/solarproof/issues/575)
+
+### Documentation
+
+* **#589:** add architecture diagram and component overview ([7b98884](https://github.com/AnnabelJoe/solarproof/commit/7b98884743d1314554387b430e42d59cf67821aa)), closes [#589](https://github.com/AnnabelJoe/solarproof/issues/589) [#589](https://github.com/AnnabelJoe/solarproof/issues/589)
+* add formal security audit report for contracts and API ([#599](https://github.com/AnnabelJoe/solarproof/issues/599)) ([73d0937](https://github.com/AnnabelJoe/solarproof/commit/73d09370cd26e467070adb8bb41cbd23408cef8d))
+* add release checklist and deployment documentation ([#586](https://github.com/AnnabelJoe/solarproof/issues/586)) ([6a151a5](https://github.com/AnnabelJoe/solarproof/commit/6a151a50441cb40dbaefa3b4764c3b74ca0057c9))
+
 ## [1.22.0](https://github.com/AnnabelJoe/solarproof/compare/v1.21.0...v1.22.0) (2026-06-26)
 
 ### Features
