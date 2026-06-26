@@ -1,3 +1,9 @@
+## [1.22.0](https://github.com/AnnabelJoe/solarproof/compare/v1.21.0...v1.22.0) (2026-06-26)
+
+### Features
+
+* add local Soroban contract invocation test harness ([#595](https://github.com/AnnabelJoe/solarproof/issues/595)) ([db3d69b](https://github.com/AnnabelJoe/solarproof/commit/db3d69ba049390c8f7f0ed1937928d99de9a2366))
+
 ## [1.21.0](https://github.com/AnnabelJoe/solarproof/compare/v1.20.0...v1.21.0) (2026-06-26)
 
 ### Features
