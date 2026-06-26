@@ -10,7 +10,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "mutation": "stryker run"
   },
   "dependencies": {
     "@noble/ed25519": "2.1.0",
