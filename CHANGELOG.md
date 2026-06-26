@@ -1,3 +1,9 @@
+## [1.25.0](https://github.com/AnnabelJoe/solarproof/compare/v1.24.0...v1.25.0) (2026-06-26)
+
+### Features
+
+* add HSM-backed meter onboarding API ([#604](https://github.com/AnnabelJoe/solarproof/issues/604)) ([2f1bbf4](https://github.com/AnnabelJoe/solarproof/commit/2f1bbf48cd2e8c158c4fa29d85ad6e4f937bcdec))
+
 ## [1.24.0](https://github.com/AnnabelJoe/solarproof/compare/v1.23.0...v1.24.0) (2026-06-26)
 
 ### Features
