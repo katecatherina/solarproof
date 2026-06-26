@@ -2,6 +2,8 @@
 
 Cooperative on-chain governance — token holders submit proposals and vote. A proposal passes when `yes_votes / total_votes ≥ quorum%` after the voting period ends.
 
+For best practices on configuring these parameters, see the [Governance Parameter Tuning Guide](../governance_tuning_guide.md).
+
 - **SDK:** Soroban SDK 23.1.0 / OpenZeppelin Stellar v0.5.1
 
 ---
@@ -56,11 +58,34 @@ Creates a new proposal. Requires `proposer` auth.
 | `title` | `String` | Short title |
 | `description` | `String` | Full description |
 
-Returns: new proposal ID (`u32`)
+Returns: new proposal ID (`u32`)  
+Emits event: `("propose", proposal_id)`
 
 **Example:**
 ```bash
 stellar contract invoke --id <CONTRACT_ID> -- propose \
+  --proposer GABC...XYZ \
+  --title "Add batch anchor support" \
+  --description "Allow anchoring multiple readings in one transaction"
+```
+
+## Debugging with tracer-sim
+
+Simulate governance calls without submitting a network transaction.
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no -- propose \
+  --proposer GABC...XYZ \
+  --title "Add batch anchor support" \
+  --description "Allow anchoring multiple readings in one transaction"
+```
+
+To estimate the gas and contract resource usage for a proposal or vote:
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no --cost -- propose \
   --proposer GABC...XYZ \
   --title "Add batch anchor support" \
   --description "Allow anchoring multiple readings in one transaction"
@@ -77,6 +102,8 @@ Casts a vote. Requires `voter` auth. Each address may vote once per proposal.
 | `voter` | `Address` | Voter address |
 | `proposal_id` | `u32` | Target proposal |
 | `approve` | `bool` | `true` = yes, `false` = no |
+
+Emits event: `("vote", (proposal_id, voter, approve))`
 
 ---
 
@@ -118,3 +145,16 @@ Returns the total number of proposals created.
 | `"voting period ended"` | `vote` called after `end_ledger` |
 | `"already finalized"` | `finalize` called on a non-`Active` proposal |
 | `"voting still open"` | `finalize` called before `end_ledger` has passed |
+
+---
+
+## Events
+Governance events are emitted into the Soroban ledger and can be consumed by off-chain services to track proposal state changes. Consumers should use the event topic and payload to rebuild proposal history.
+| Topic | Data | Emitted by |
+|---|---|---|
+| `"propose"` | `proposal_id: u32` | `propose` |
+| `"vote"` | `(proposal_id: u32, voter: Address, approve: bool)` | `vote` |
+| `"final"` | `(proposal_id: u32, status: ProposalStatus)` | `finalize` |
+| `"upg_prop"` | `(new_wasm_hash: BytesN<32>, unlock_ledger: u32)` | `propose_upgrade` |
+| `"upg_cncl"` | `()` | `cancel_upgrade` |
+| `"upg_exec"` | `new_wasm_hash: BytesN<32>` | `execute_upgrade` |
