@@ -1,3 +1,13 @@
+## [1.24.0](https://github.com/AnnabelJoe/solarproof/compare/v1.23.0...v1.24.0) (2026-06-26)
+
+### Features
+
+* **#530:** add certificate history page and metrics dashboard ([2d5b07e](https://github.com/AnnabelJoe/solarproof/commit/2d5b07e4b6d42d37796179221ec8f84d1ae636a5)), closes [#530](https://github.com/AnnabelJoe/solarproof/issues/530) [#530](https://github.com/AnnabelJoe/solarproof/issues/530)
+
+### Documentation
+
+* link onboarding guide from README and CONTRIBUTING ([eca3a9b](https://github.com/AnnabelJoe/solarproof/commit/eca3a9b1414aadd7e6ee72d44f6561412db60669)), closes [#584](https://github.com/AnnabelJoe/solarproof/issues/584)
+
 ## [1.23.0](https://github.com/AnnabelJoe/solarproof/compare/v1.22.0...v1.23.0) (2026-06-26)
 
 ### Features
