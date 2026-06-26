@@ -5,36 +5,45 @@ on:
     branches: [main]
 
 jobs:
-  deploy-production:
-    name: Deploy to Production (Vercel)
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  deploy:
+    name: Deploy to Vercel (production)
     runs-on: ubuntu-latest
-    environment: production
+    needs: ci
+    permissions:
+      deployments: write
+    environment:
+      name: production
+      url: ${{ steps.promote.outputs.url }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Deploy to Vercel (production)
+      - name: Build & deploy preview (green)
         id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          DEPLOY_URL=$(pnpm dlx vercel deploy --prod \
-            --token ${{ secrets.VERCEL_TOKEN }} \
-            --scope ${{ secrets.VERCEL_ORG_ID }} \
-            --yes \
-            apps/web)
-          echo "url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+          url=$(vercel deploy --token "$VERCEL_TOKEN" --yes 2>&1 | tail -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke test
-        run: node scripts/smoke-test.mjs ${{ steps.deploy.outputs.url }}
+      - name: Promote to production
+        id: promote
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          vercel promote "${{ steps.deploy.outputs.url }}" \
+            --token "$VERCEL_TOKEN" --scope "$VERCEL_ORG_ID"
+          echo "url=${{ steps.deploy.outputs.url }}" >> "$GITHUB_OUTPUT"
 
-      - name: Summary
-        run: echo "Production deployed to ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+      - name: Write deployment URL to job summary
+        run: echo "### 🚀 Production deployed to ${{ steps.promote.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"

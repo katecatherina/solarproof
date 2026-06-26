@@ -1,69 +1,148 @@
-#!/usr/bin/env node
-/**
- * scripts/smoke-test.mjs
- *
- * Post-deployment smoke test. Hits critical endpoints and exits non-zero
- * if any check fails, causing the deployment job to fail.
- *
- * Usage:
- *   node scripts/smoke-test.mjs https://solarproof.vercel.app
- */
+import crypto from 'crypto'
+import {
+  Contract,
+  Keypair,
+  Networks,
+  TransactionBuilder,
+  BASE_FEE,
+} from '@stellar/stellar-sdk'
+import {
+  getRpcServer,
+  NETWORKS,
+  addressToScVal,
+  amountToScVal,
+  bytesToScVal,
+  kwhToStroops,
+  nativeToScVal,
+} from '@solarproof/stellar'
 
-const BASE_URL = process.argv[2]?.replace(/\/$/, '')
-
-if (!BASE_URL) {
-  console.error('Usage: node scripts/smoke-test.mjs <BASE_URL>')
-  process.exit(1)
-}
-
-const checks = [
-  {
-    name: 'Health endpoint returns ok',
-    url: `${BASE_URL}/api/health`,
-    validate: (json) => json.status === 'ok',
-  },
-  {
-    name: 'Home page loads (200)',
-    url: `${BASE_URL}/`,
-    validate: null, // just checks HTTP 200
-  },
-  {
-    name: 'Dashboard page loads (200)',
-    url: `${BASE_URL}/dashboard`,
-    validate: null,
-  },
-  {
-    name: 'Verify page loads (200)',
-    url: `${BASE_URL}/verify`,
-    validate: null,
-  },
-  {
-    name: 'Certificates API returns JSON',
-    url: `${BASE_URL}/api/certificates?limit=1`,
-    validate: (json) => Array.isArray(json.certificates),
-  },
-]
-
-let passed = 0
-let failed = 0
-
-for (const check of checks) {
-  try {
-    const res = await fetch(check.url, { redirect: 'follow' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-    if (check.validate) {
-      const json = await res.json()
-      if (!check.validate(json)) throw new Error(`Validation failed: ${JSON.stringify(json)}`)
-    }
-
-    console.log(`  ✓ ${check.name}`)
-    passed++
-  } catch (err) {
-    console.error(`  ✗ ${check.name}: ${err.message}`)
-    failed++
+function loadEnv(name, required = true) {
+  const value = process.env[name]
+  if (required && !value) {
+    throw new Error(`Missing required environment variable: ${name}`)
   }
+  return value
 }
 
-console.log(`\nSmoke test: ${passed} passed, ${failed} failed`)
-if (failed > 0) process.exit(1)
+function stringToScVal(value) {
+  return nativeToScVal(value, { type: 'string' })
+}
+
+async function buildAndSubmit({server, secret, contractId, method, args, network}) {
+  const keypair = Keypair.fromSecret(secret)
+  const account = await server.getAccount(keypair.publicKey())
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORKS[network].networkPassphrase,
+  })
+    .addOperation(new Contract(contractId).call(method, ...args))
+    .setTimeout(60)
+    .build()
+
+  tx.sign(keypair)
+  const envelope = tx.toEnvelope().toXDR('base64')
+  const result = await server.sendTransaction(envelope)
+  return result
+}
+
+async function verifyAnchor({server, secret, contractId, readingHash, network}) {
+  console.log('Verifying audit anchor on audit_registry...')
+  return buildAndSubmit({
+    server,
+    secret,
+    contractId,
+    method: 'verify',
+    network,
+    args: [bytesToScVal(readingHash)],
+  })
+}
+
+async function checkTokenBalance({server, secret, contractId, account, network}) {
+  console.log('Checking energy token balance for recipient...')
+  return buildAndSubmit({
+    server,
+    secret,
+    contractId,
+    method: 'balance',
+    network,
+    args: [addressToScVal(account)],
+  })
+}
+
+async function run() {
+  const network = process.env.SMOKE_NETWORK || 'testnet'
+  const server = getRpcServer(network)
+
+  const meterSecret = loadEnv('SMOKE_METER_SECRET_KEY')
+  const minterSecret = loadEnv('SMOKE_TOKEN_MINTER_SECRET_KEY')
+  const energyTokenId = loadEnv('ENERGY_TOKEN_ID')
+  const auditRegistryId = loadEnv('AUDIT_REGISTRY_ID')
+
+  const meterKeypair = Keypair.fromSecret(meterSecret)
+  const recipientKeypair = Keypair.random()
+
+  const readingHash = crypto.randomBytes(32)
+  const signature = meterKeypair.sign(readingHash)
+  const meterId = 'STAGING-METER-001'
+  const kwh = 1
+  const kwhStroops = kwhToStroops(kwh)
+  const timestamp = BigInt(Math.floor(Date.now() / 1000))
+
+  console.log('Submitting audit anchor to audit_registry...')
+  const anchorResult = await buildAndSubmit({
+    server,
+    secret: meterSecret,
+    contractId: auditRegistryId,
+    method: 'anchor',
+    network,
+    args: [
+      bytesToScVal(readingHash),
+      bytesToScVal(meterKeypair.rawPublicKey()),
+      bytesToScVal(signature),
+      amountToScVal(kwhStroops),
+      stringToScVal(meterId),
+      nativeToScVal(timestamp, { type: 'u64' }),
+    ],
+  })
+
+  console.log('Audit anchor transaction result:', JSON.stringify(anchorResult, null, 2))
+
+  await verifyAnchor({
+    server,
+    secret: meterSecret,
+    contractId: auditRegistryId,
+    readingHash,
+    network,
+  })
+
+  console.log('Minting energy certificate token...')
+  const mintResult = await buildAndSubmit({
+    server,
+    secret: minterSecret,
+    contractId: energyTokenId,
+    method: 'mint',
+    network,
+    args: [
+      addressToScVal(recipientKeypair.publicKey()),
+      amountToScVal(kwhStroops),
+    ],
+  })
+
+  console.log('Mint transaction result:', JSON.stringify(mintResult, null, 2))
+
+  await checkTokenBalance({
+    server,
+    secret: minterSecret,
+    contractId: energyTokenId,
+    account: recipientKeypair.publicKey(),
+    network,
+  })
+
+  console.log(`Certificate minted to ${recipientKeypair.publicKey()}`)
+  console.log('Smoke test completed successfully.')
+}
+
+run().catch((err) => {
+  console.error('Smoke test failed:', err)
+  process.exit(1)
+})

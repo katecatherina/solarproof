@@ -61,7 +61,18 @@ aws s3 ls s3://solarproof-backups/backups/
 aws s3 cp s3://solarproof-backups/backups/solarproof-backup-<TIMESTAMP>.dump ./restore.dump
 ```
 
-### 2. Restore to a target database
+### 2. Verify the backup archive
+
+Before restoring, validate the downloaded archive to catch corruption early.
+
+```bash
+file restore.dump
+pg_restore --list restore.dump | head -n 20
+```
+
+If `pg_restore --list` fails, the archive is invalid and should not be restored.
+
+### 3. Restore to a target database
 
 ```bash
 pg_restore \
@@ -76,12 +87,17 @@ pg_restore \
 
 > ⚠️ `--clean --if-exists` drops existing objects before restoring. Run against a staging database first to validate the backup before touching production.
 
-### 3. Verify
+### 4. Verify the restored database
 
 ```bash
 psql "$TARGET_DATABASE_URL" -c "SELECT COUNT(*) FROM readings;"
 psql "$TARGET_DATABASE_URL" -c "SELECT COUNT(*) FROM certificates;"
+psql "$TARGET_DATABASE_URL" -c "SELECT COUNT(*) FROM meters;"
 ```
+
+Compare restored row counts and schema to a known-good environment before promoting the restored database into production.
+
+> Tip: If you have production counts available, compare them with the staging restore results to ensure the archive contains the expected data.
 
 ---
 
