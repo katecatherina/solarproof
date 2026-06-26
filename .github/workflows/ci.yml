@@ -168,12 +168,12 @@ jobs:
           workspaces: apps/contracts/fuzz
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
-      - name: fuzz_mint (30 s)
-        run: cargo fuzz run fuzz_mint -- -max_total_time=30 corpus/fuzz_mint
+      - name: fuzz_mint (60 s)
+        run: cargo fuzz run fuzz_mint -- -max_total_time=60 corpus/fuzz_mint
         working-directory: apps/contracts/fuzz
-      - name: fuzz_anchor (30 s)
-        run: cargo fuzz run fuzz_anchor -- -max_total_time=30 corpus/fuzz_anchor
+      - name: fuzz_anchor (60 s)
+        run: cargo fuzz run fuzz_anchor -- -max_total_time=60 corpus/fuzz_anchor
         working-directory: apps/contracts/fuzz
-      - name: fuzz_vote (30 s)
-        run: cargo fuzz run fuzz_vote -- -max_total_time=30 corpus/fuzz_vote
+      - name: fuzz_vote (60 s)
+        run: cargo fuzz run fuzz_vote -- -max_total_time=60 corpus/fuzz_vote
         working-directory: apps/contracts/fuzz
