@@ -1,3 +1,13 @@
+## [1.20.0](https://github.com/AnnabelJoe/solarproof/compare/v1.19.0...v1.20.0) (2026-06-26)
+
+### Features
+
+* **#581:** add frontend production metrics collection for critical paths ([2e90851](https://github.com/AnnabelJoe/solarproof/commit/2e90851b5158c821d78f5ff9e5b11485ac314fbd)), closes [#581](https://github.com/AnnabelJoe/solarproof/issues/581) [#581](https://github.com/AnnabelJoe/solarproof/issues/581)
+
+### Documentation
+
+* add contract event schema stability guidance ([c68a0ef](https://github.com/AnnabelJoe/solarproof/commit/c68a0ef29a09450a573ff0ac4784226293542c87)), closes [#569](https://github.com/AnnabelJoe/solarproof/issues/569)
+
 ## [1.19.0](https://github.com/AnnabelJoe/solarproof/compare/v1.18.2...v1.19.0) (2026-06-25)
 
 ### Features
