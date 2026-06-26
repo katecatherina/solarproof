@@ -5,21 +5,17 @@ import { createServiceClient } from '@/lib/supabase'
 import { computeReadingHash } from '@/lib/crypto'
 import { kwhToStroops } from '@solarproof/stellar'
 import { checkRateLimit } from '@/lib/cache'
+import { checkRateLimit as checkIpRateLimit, getClientIp } from '@/lib/rate-limit'
 import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/idempotency'
 import { logger } from '@/lib/logger'
 import { requireAuth, isAuthError } from '@/lib/auth'
 import { enqueue } from '@/lib/queue'
 
 const NONCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
-const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL
 
-/** Simple per-key rate limiter (no-op when Redis is unavailable). */
-async function checkRateLimitByKey(
-  _key: string, _limit: number
-): Promise<{ allowed: boolean; resetSeconds: number; remaining: number }> {
-  // Falls back to allow-all; the pubkey-based checkRateLimit handles enforcement
-  return { allowed: true, resetSeconds: 0, remaining: _limit }
-}
+// IP rate limit: 10 POSTs per 60 s per IP
+const IP_RATE_LIMIT = 10
+const IP_RATE_WINDOW_MS = 60_000
 const QuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().optional(),
@@ -97,6 +93,25 @@ export async function POST(req: NextRequest) {
   const correlationId = req.headers.get('x-correlation-id') ?? undefined
   const log = correlationId ? logger.withCorrelationId(correlationId) : logger
 
+  // IP-based rate limit: 10 requests / 60 s per IP (abuse protection)
+  const ip = getClientIp(req)
+  const ipRl = checkIpRateLimit(`ip:readings:${ip}`, IP_RATE_LIMIT, IP_RATE_WINDOW_MS)
+  if (!ipRl.allowed) {
+    const retryAfter = Math.ceil((ipRl.resetAt - Date.now()) / 1000)
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.', retryAfter },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(retryAfter),
+          'X-RateLimit-Limit': String(IP_RATE_LIMIT),
+          'X-RateLimit-Remaining': String(ipRl.remaining),
+          'X-RateLimit-Reset': String(Math.ceil(ipRl.resetAt / 1000)),
+        },
+      }
+    )
+  }
+
   // Idempotency-Key header check
   const idempotencyKey = req.headers.get('idempotency-key')
   if (idempotencyKey) {
@@ -115,25 +130,6 @@ export async function POST(req: NextRequest) {
   }
 
   const { meter_id, kwh, timestamp, signature_hex, nonce } = parsed.data
-  const limit = Number(process.env.READINGS_RATE_LIMIT_PER_MINUTE ?? 60)
-  // Redis-backed sliding-window rate limit by meter_id
-  const rateKey = `rate:readings:${meter_id}`
-  if (UPSTASH_REDIS_REST_URL) {
-    const rate = await checkRateLimitByKey(rateKey, limit)
-    if (!rate.allowed) {
-      return NextResponse.json(
-        { error: 'Too many requests, please try again later' },
-        {
-          status: 429,
-          headers: {
-            'Retry-After': rate.resetSeconds.toString(),
-            'X-RateLimit-Limit': limit.toString(),
-            'X-RateLimit-Remaining': rate.remaining.toString(),
-          },
-        }
-      )
-    }
-  }
 
   const db = createServiceClient()
 
