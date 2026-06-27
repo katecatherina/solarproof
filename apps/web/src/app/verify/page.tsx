@@ -187,8 +187,12 @@ export default function VerifyPage() {
 
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {loading && 'Verifying certificate, please wait.'}
-        {error && `Error: ${error}`}
-        {result && 'Certificate verified successfully.'}
+        {pageError && `Error: ${pageError.message}`}
+        {steps && !loading && (
+          allPass
+            ? `Verification complete. All ${steps.length} proof steps passed.`
+            : `Verification complete. ${steps.filter(s => s.status === 'fail').length} of ${steps.length} steps failed.`
+        )}
       </div>
 
       {error && (
@@ -240,8 +244,13 @@ export default function VerifyPage() {
           <ol aria-label="Proof verification steps" className="relative space-y-0">
             {steps.map((step, i) => {
               const isLast = i === steps.length - 1
+              const statusLabel = step.status === 'pass' ? 'Verified' : step.status === 'fail' ? 'Failed' : 'Pending'
               return (
-                <li key={step.id} className="flex gap-4">
+                <li
+                  key={step.id}
+                  aria-label={`Step ${i + 1}: ${step.label} — ${statusLabel}`}
+                  className="flex gap-4"
+                >
                   {/* Connector line + icon */}
                   <div className="flex flex-col items-center">
                     <StepIcon status={step.status} />
@@ -258,7 +267,7 @@ export default function VerifyPage() {
                         step.status === 'pass' ? 'text-green-600 dark:text-green-400' :
                         step.status === 'fail' ? 'text-red-600 dark:text-red-400' :
                         'text-gray-400 dark:text-gray-500'
-                      }`}>
+                      }`} aria-hidden="true">
                         {step.status === 'pass' ? '✓ Verified' : step.status === 'fail' ? '✗ Failed' : '— Pending'}
                       </span>
                     </p>
