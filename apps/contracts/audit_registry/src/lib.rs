@@ -646,6 +646,42 @@ mod tests {
         let admin = client.admin();
         assert_eq!(admin, Address::generate(&env));
     }
+
+    // --- Invariant: zero and negative kwh_stroops must be rejected ---
+
+    #[test]
+    #[should_panic(expected = "kwh must be positive")]
+    fn test_zero_kwh_rejected() {
+        let (env, client) = setup();
+        let signer = soroban_sdk::testutils::ed25519::Signer::generate(&env);
+        let reading_hash = BytesN::from_array(&env, &[2u8; 32]);
+        let sig = signer.sign(&env, &Bytes::from_slice(&env, reading_hash.to_array().as_ref()));
+        client.anchor(
+            &reading_hash,
+            &signer.public_key(&env),
+            &sig,
+            &0_i128,
+            &soroban_sdk::String::from_str(&env, "METER-001"),
+            &1_700_000_000_u64,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "kwh must be positive")]
+    fn test_negative_kwh_rejected() {
+        let (env, client) = setup();
+        let signer = soroban_sdk::testutils::ed25519::Signer::generate(&env);
+        let reading_hash = BytesN::from_array(&env, &[3u8; 32]);
+        let sig = signer.sign(&env, &Bytes::from_slice(&env, reading_hash.to_array().as_ref()));
+        client.anchor(
+            &reading_hash,
+            &signer.public_key(&env),
+            &sig,
+            &-1_i128,
+            &soroban_sdk::String::from_str(&env, "METER-001"),
+            &1_700_000_000_u64,
+        );
+    }
 }
 
 #[cfg(test)]
