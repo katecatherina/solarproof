@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { X, ArrowRightLeft } from 'lucide-react'
 import { CopyableText } from './copy-button'
 
@@ -14,6 +14,48 @@ interface Props {
 export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props) {
   const [toAddress, setToAddress] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<Element | null>(null)
+
+  // Capture triggering element and auto-focus dialog on mount; restore focus on unmount
+  useEffect(() => {
+    triggerRef.current = document.activeElement
+    dialogRef.current?.focus()
+    return () => {
+      (triggerRef.current as HTMLElement | null)?.focus()
+    }
+  }, [])
+
+  // Escape key closes the modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  // Focus trap: keep Tab inside the dialog
+  function handleTabKey(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'Tab') return
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+    if (!focusable || focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -27,13 +69,18 @@ export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props)
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="transfer-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="transfer-title"
+        tabIndex={-1}
+        onKeyDown={handleTabKey}
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl outline-none dark:bg-gray-900"
+      >
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ArrowRightLeft className="h-5 w-5 text-blue-500" aria-hidden="true" />
@@ -43,7 +90,7 @@ export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props)
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label="Close transfer certificate dialog"
             className="rounded p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
           >
             <X className="h-4 w-4" aria-hidden="true" />

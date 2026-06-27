@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { X, Leaf } from 'lucide-react'
 import { CopyableText } from './copy-button'
 
@@ -14,7 +14,48 @@ interface Props {
 export function RetireModal({ certificateId, kwh, onConfirm, onClose }: Props) {
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<Element | null>(null)
+
+  // Capture triggering element and auto-focus dialog on mount; restore focus on unmount
+  useEffect(() => {
+    triggerRef.current = document.activeElement
+    dialogRef.current?.focus()
+    return () => {
+      (triggerRef.current as HTMLElement | null)?.focus()
+    }
+  }, [])
+
+  // Escape key closes the modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  // Focus trap: keep Tab inside the dialog
+  function handleTabKey(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'Tab') return
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+    if (!focusable || focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -28,13 +69,18 @@ export function RetireModal({ certificateId, kwh, onConfirm, onClose }: Props) {
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="retire-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="retire-title"
+        tabIndex={-1}
+        onKeyDown={handleTabKey}
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl outline-none dark:bg-gray-900"
+      >
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Leaf className="h-5 w-5 text-green-500" aria-hidden="true" />
@@ -44,7 +90,7 @@ export function RetireModal({ certificateId, kwh, onConfirm, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label="Close retire certificate dialog"
             className="rounded p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -68,7 +114,6 @@ export function RetireModal({ certificateId, kwh, onConfirm, onClose }: Props) {
             </label>
             <textarea
               id="retire-reason"
-              ref={inputRef}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
@@ -99,19 +144,8 @@ export function RetireModal({ certificateId, kwh, onConfirm, onClose }: Props) {
                   viewBox="0 0 24 24"
                   aria-hidden="true"
                 >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
               )}
               {submitting ? 'Retiring…' : 'Confirm retirement'}
