@@ -10,7 +10,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "mutation": "stryker run"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1073.0",
