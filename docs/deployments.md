@@ -2,6 +2,11 @@
 
 Deployed contract addresses for each environment. Update this file after every deployment.
 
+> **Placeholder convention:** Values shown as `<PLACEHOLDER>` have not been filled in yet
+> and must be replaced with the real 56-character Stellar contract ID (starting with `C`)
+> before the environment is functional.  Values shown as `_(not yet deployed)_` mean the
+> contract has never been deployed to that network.
+
 ---
 
 ## Staging (Testnet)
@@ -22,11 +27,26 @@ Explorer: `https://stellar.expert/explorer/testnet/contract/<CONTRACT_ID>`
 
 | Contract | Contract ID | Deployed At | Deployed By |
 |---|---|---|---|
-| `energy_token` | _(set after first deploy)_ | — | — |
-| `audit_registry` | _(set after first deploy)_ | — | — |
-| `community_governance` | _(set after first deploy)_ | — | — |
+| `energy_token` | `<TESTNET_ENERGY_TOKEN_ID>` | — | — |
+| `audit_registry` | `<TESTNET_AUDIT_REGISTRY_ID>` | — | — |
+| `community_governance` | `<TESTNET_COMMUNITY_GOVERNANCE_ID>` | — | — |
 
 Explorer: `https://stellar.expert/explorer/testnet/contract/<CONTRACT_ID>`
+
+### Required environment variables (testnet)
+
+After deploying, set the following in your `.env.local` (see `.env.example`):
+
+```env
+NEXT_PUBLIC_STELLAR_NETWORK=testnet
+NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
+NEXT_PUBLIC_ENERGY_TOKEN_ID=<TESTNET_ENERGY_TOKEN_ID>
+NEXT_PUBLIC_AUDIT_REGISTRY_ID=<TESTNET_AUDIT_REGISTRY_ID>
+NEXT_PUBLIC_COMMUNITY_GOVERNANCE_ID=<TESTNET_COMMUNITY_GOVERNANCE_ID>
+MINTER_SECRET_KEY=<your-testnet-deployer-secret>
+```
+
+---
 
 ## Mainnet
 
@@ -37,6 +57,20 @@ Explorer: `https://stellar.expert/explorer/testnet/contract/<CONTRACT_ID>`
 | `community_governance` | _(not yet deployed)_ | — | — |
 
 Explorer: `https://stellar.expert/explorer/public/contract/<CONTRACT_ID>`
+
+### Required environment variables (mainnet)
+
+```env
+NEXT_PUBLIC_STELLAR_NETWORK=mainnet
+NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-rpc.stellar.org
+NEXT_PUBLIC_ENERGY_TOKEN_ID=<MAINNET_ENERGY_TOKEN_ID>
+NEXT_PUBLIC_AUDIT_REGISTRY_ID=<MAINNET_AUDIT_REGISTRY_ID>
+NEXT_PUBLIC_COMMUNITY_GOVERNANCE_ID=<MAINNET_COMMUNITY_GOVERNANCE_ID>
+MINTER_SECRET_KEY=<your-mainnet-deployer-secret>
+```
+
+> ⚠️ Mainnet deployments are irreversible. Use a hardware wallet or HSM-backed key.
+> Never commit real secret keys — use GitHub Actions secrets in CI/CD.
 
 ---
 
