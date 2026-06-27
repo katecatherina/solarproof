@@ -1,0 +1,21 @@
+name: TruffleHog Secret Scanning
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  trufflehog:
+    name: Detect secrets (trufflehog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@v3
+        with:
+          # Scan only the diff introduced by this PR
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --only-verified
