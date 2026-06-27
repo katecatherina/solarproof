@@ -22,6 +22,9 @@ export interface Database {
           reading_hash: string; signature_hex: string
           anchor_tx_hash: string | null; mint_tx_hash: string | null
           anchored: boolean; minted: boolean
+          metadata: Record<string, unknown> | null
+          metadata_hash: string | null       // SHA-256 hex of canonical metadata JSON
+          metadata_signature_hex: string | null  // Ed25519 sig over metadata_hash (128 hex chars)
         }
         Insert: Omit<Database['public']['Tables']['readings']['Row'], 'id'>
         Update: Partial<Database['public']['Tables']['readings']['Insert']>

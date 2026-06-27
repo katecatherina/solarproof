@@ -12,3 +12,25 @@ export function computeReadingHash(meterId: string, kwhStroops: bigint, timestam
   tsBuf.writeBigInt64LE(timestampUnix)
   return createHash('sha256').update(meterBytes).update(kwhBuf).update(tsBuf).digest()
 }
+
+/**
+ * Meter metadata that can accompany a signed reading.
+ * All fields are optional — the meter may not expose all of them.
+ */
+export interface MeterMetadata {
+  firmware_version?: string
+  hardware_model?: string
+  location_lat?: number
+  location_lon?: number
+  manufacturer?: string
+}
+
+/**
+ * Compute the canonical metadata hash: SHA-256(canonical JSON of metadata).
+ * The meter signs this hash with its Ed25519 key so the payload is tamper-evident.
+ */
+export function computeMetadataHash(metadata: MeterMetadata): Buffer {
+  // Sort keys for deterministic serialisation
+  const canonical = JSON.stringify(metadata, Object.keys(metadata).sort())
+  return createHash('sha256').update(Buffer.from(canonical, 'utf8')).digest()
+}

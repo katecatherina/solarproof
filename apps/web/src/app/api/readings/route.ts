@@ -3,15 +3,29 @@ import { verify } from '@noble/ed25519'
 import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase'
 import { anchorReading, mintCertificates } from '@/lib/stellar'
-import { computeReadingHash } from '@/lib/crypto'
+import { computeReadingHash, computeMetadataHash, MeterMetadata } from '@/lib/crypto'
 import { kwhToStroops } from '@solarproof/stellar'
+
+const MetadataSchema = z.object({
+  firmware_version: z.string().optional(),
+  hardware_model: z.string().optional(),
+  location_lat: z.number().optional(),
+  location_lon: z.number().optional(),
+  manufacturer: z.string().optional(),
+})
 
 const ReadingSchema = z.object({
   meter_id: z.string().uuid(),
   kwh: z.number().positive(),
   timestamp: z.number().int().positive(), // Unix seconds
   signature_hex: z.string().length(128),  // 64-byte Ed25519 sig as hex
-})
+  // Optional signed metadata payload
+  metadata: MetadataSchema.optional(),
+  metadata_signature_hex: z.string().length(128).optional(), // Ed25519 sig over metadata hash
+}).refine(
+  (d) => !d.metadata || !!d.metadata_signature_hex,
+  { message: 'metadata_signature_hex required when metadata is present', path: ['metadata_signature_hex'] }
+)
 
 /**
  * POST /api/readings
@@ -28,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const { meter_id, kwh, timestamp, signature_hex } = parsed.data
+  const { meter_id, kwh, timestamp, signature_hex, metadata, metadata_signature_hex } = parsed.data
   const db = createServiceClient()
 
   // Fetch meter + cooperative
@@ -58,6 +72,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid meter signature' }, { status: 401 })
   }
 
+  // Verify optional metadata signature
+  let metadataHash: Buffer | null = null
+  if (metadata && metadata_signature_hex) {
+    metadataHash = computeMetadataHash(metadata as MeterMetadata)
+    const metaSigValid = await verify(
+      Buffer.from(metadata_signature_hex, 'hex'),
+      metadataHash,
+      Buffer.from(meter.pubkey_hex, 'hex')
+    ).catch(() => false)
+
+    if (!metaSigValid) {
+      return NextResponse.json({ error: 'Invalid metadata signature' }, { status: 401 })
+    }
+  }
+
   // Persist reading
   const { data: reading, error: readingErr } = await db
     .from('readings')
@@ -69,6 +98,9 @@ export async function POST(req: NextRequest) {
       signature_hex,
       anchored: false,
       minted: false,
+      metadata: metadata ?? null,
+      metadata_hash: metadataHash ? metadataHash.toString('hex') : null,
+      metadata_signature_hex: metadata_signature_hex ?? null,
     })
     .select()
     .single()
