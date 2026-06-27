@@ -184,6 +184,7 @@ export default function VerifyPage() {
           </button>
         </div>
       </form>
+      <p id="verify-hint" className="sr-only">Enter a certificate ID, reading hash, or transaction hash to verify the chain of custody.</p>
 
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {loading && 'Verifying certificate, please wait.'}
