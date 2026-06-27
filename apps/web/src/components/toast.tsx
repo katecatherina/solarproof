@@ -90,6 +90,7 @@ export function ToastContainer() {
   return (
     <div
       aria-live="polite"
+      aria-atomic="true"
       aria-label="Notifications"
       className="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
     >
@@ -98,7 +99,6 @@ export function ToastContainer() {
         return (
           <div
             key={t.id}
-            role="status"
             className={`flex max-w-sm items-start gap-3 rounded-lg border px-4 py-3 shadow-md ${styles[t.variant]}`}
           >
             <Icon

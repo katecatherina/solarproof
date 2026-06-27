@@ -9,6 +9,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/database.types'
 import {
   makeCooperative,
   makeMeter,
@@ -62,7 +64,7 @@ describe('factories', () => {
 
   it('makeCooperative returns a cooperative row and tracks id', async () => {
     const row = { id: 'coop-1', name: 'Test Cooperative 1', admin_address: 'GABC', created_at: '' }
-    const db = buildDb({ cooperatives: row }) as any
+    const db = buildDb({ cooperatives: row }) as unknown as SupabaseClient<Database>
     const result = await makeCooperative(db, ids)
     expect(result.id).toBe('coop-1')
     expect(ids.cooperatives).toContain('coop-1')
@@ -83,7 +85,7 @@ describe('factories', () => {
         }),
         delete: vi.fn().mockReturnValue({ in: inMock }),
       })),
-    } as any
+    } as unknown as SupabaseClient<Database>
     const result = await makeMeter(db, ids)
     expect(result.id).toBe('meter-1')
     expect(ids.meters).toContain('meter-1')
@@ -104,7 +106,7 @@ describe('factories', () => {
         }),
         delete: vi.fn().mockReturnValue({ in: inMock }),
       })),
-    } as any
+    } as unknown as SupabaseClient<Database>
     const result = await makeReading(db, ids)
     expect(result.id).toBe('reading-1')
     expect(ids.readings).toContain('reading-1')
@@ -126,7 +128,7 @@ describe('factories', () => {
         }),
         delete: vi.fn().mockReturnValue({ in: inMock }),
       })),
-    } as any
+    } as unknown as SupabaseClient<Database>
     const result = await makeCertificate(db, ids)
     expect(result.id).toBe('cert-1')
     expect(ids.certificates).toContain('cert-1')
@@ -134,7 +136,7 @@ describe('factories', () => {
 
   it('makeOperator returns cooperative and admin_address', async () => {
     const row = { id: 'coop-5', name: 'Op', admin_address: 'GOPERATOR', created_at: '' }
-    const db = buildDb({ cooperatives: row }) as any
+    const db = buildDb({ cooperatives: row }) as unknown as SupabaseClient<Database>
     const result = await makeOperator(db, ids)
     expect(result.cooperative.id).toBe('coop-5')
     expect(typeof result.admin_address).toBe('string')
@@ -144,7 +146,7 @@ describe('factories', () => {
   it('cleanup calls delete on all tracked tables', async () => {
     const deleteIn = vi.fn().mockResolvedValue({ error: null })
     const deleteChain = vi.fn().mockReturnValue({ in: deleteIn })
-    const db = { from: vi.fn().mockReturnValue({ delete: deleteChain }) } as any
+    const db = { from: vi.fn().mockReturnValue({ delete: deleteChain }) } as unknown as SupabaseClient<Database>
 
     const testIds: CleanupIds = {
       certificates: ['cert-1'],
@@ -164,7 +166,7 @@ describe('factories', () => {
   it('cleanup skips tables with no tracked ids', async () => {
     const deleteIn = vi.fn().mockResolvedValue({ error: null })
     const deleteChain = vi.fn().mockReturnValue({ in: deleteIn })
-    const db = { from: vi.fn().mockReturnValue({ delete: deleteChain }) } as any
+    const db = { from: vi.fn().mockReturnValue({ delete: deleteChain }) } as unknown as SupabaseClient<Database>
 
     await cleanup(db, emptyCleanupIds())
     expect(db.from).not.toHaveBeenCalled()

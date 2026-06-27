@@ -6,6 +6,8 @@ Thanks for contributing! PRs target `develop`. All CI must pass before merge.
 
 ## Getting Started
 
+> **First time here?** Follow the [Developer Onboarding Guide](docs/ONBOARDING.md) to set up your local environment end-to-end before contributing.
+
 1. Browse [open issues](../../issues) — look for `good first issue`
 2. Comment to claim before starting
 3. Fork and branch from `develop`
