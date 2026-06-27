@@ -14,5 +14,8 @@ We will implement an API Adapter in the `apps/web` layer rather than an on-chain
 1. **Minting/Issuance**: When certificates are minted on SolarProof, they remain local until bridged.
 2. **Retirement Trigger**: When a user retires a certificate on SolarProof (`/api/certificates/[id]/retire`), a webhook or asynchronous job will trigger the I-REC API to retire an equivalent number of I-RECs if the bridging is enabled for that certificate.
 
+## Roadmap
+This document tracks the working roadmap item described in issue #609.
+
 ## Proof-of-Concept Implementation
 A placeholder API adapter has been added to `apps/web/src/lib/irec-bridge.ts` to demonstrate how the retirement payload will be structured and dispatched.

@@ -4,18 +4,48 @@ export interface Database {
   public: {
     Tables: {
       cooperatives: {
-        Row: { id: string; name: string; admin_address: string; created_at: string }
-        Insert: { name: string; admin_address: string }
-        Update: Partial<{ name: string; admin_address: string }>
+        Row: { id: string; name: string; admin_address: string; created_at: string; suspended: boolean; account_type: 'individual' | 'cooperative' }
+        Insert: { name: string; admin_address: string; suspended?: boolean; account_type?: 'individual' | 'cooperative' }
+        Update: Partial<{ name: string; admin_address: string; suspended: boolean; account_type: 'individual' | 'cooperative' }>
+        Relationships: []
+      }
+      proposals: {
+        Row: {
+          id: string; cooperative_id: string; title: string; description: string
+          status: 'active' | 'passed' | 'rejected'; action: string | null; ends_at: string; created_at: string
+        }
+        Insert: {
+          cooperative_id: string; title: string; description: string
+          status?: 'active' | 'passed' | 'rejected'; action?: string | null; ends_at: string
+        }
+        Update: Partial<{
+          title: string; description: string; status: 'active' | 'passed' | 'rejected'; action: string | null; ends_at: string
+        }>
+        Relationships: []
+      }
+      votes: {
+        Row: { proposal_id: string; voter_id: string; choice: 'for' | 'against' | 'abstain'; created_at: string }
+        Insert: { proposal_id: string; voter_id: string; choice: 'for' | 'against' | 'abstain' }
+        Update: Partial<{ choice: 'for' | 'against' | 'abstain' }>
         Relationships: []
       }
       meters: {
         Row: {
           id: string; cooperative_id: string; serial_number: string
           name: string; pubkey_hex: string; active: boolean; created_at: string
+          api_key: string; meter_group: string | null; tags: string[]
+          revoked_at: string | null; revocation_reason: string | null
         }
-        Insert: { cooperative_id: string; serial_number: string; name: string; pubkey_hex: string; active: boolean }
-        Update: Partial<{ cooperative_id: string; serial_number: string; name: string; pubkey_hex: string; active: boolean }>
+        Insert: {
+          cooperative_id: string; serial_number: string; name: string; pubkey_hex: string
+          active: boolean; api_key?: string; meter_group?: string | null; tags?: string[]
+          revoked_at?: string | null; revocation_reason?: string | null
+        }
+        Update: Partial<{
+          cooperative_id: string; serial_number: string; name: string; pubkey_hex: string
+          active: boolean; api_key: string; meter_group: string | null; tags: string[]
+          revoked_at: string | null; revocation_reason: string | null
+        }>
         Relationships: []
       }
       readings: {
@@ -40,14 +70,13 @@ export interface Database {
           anchored: boolean; minted: boolean
           mint_diagnosis: Json | null
         }>
-        Relationships: []
+        Relationships: [{ foreignKeyName: 'readings_meter_id_fkey'; columns: ['meter_id']; referencedRelation: 'meters'; referencedColumns: ['id'] }]
       }
       idempotency_keys: {
-        Row: {
-          nonce: string; reading_id: string; response: Json; created_at: string
-        }
+        Row: { nonce: string; reading_id: string; response: Json; created_at: string }
         Insert: Omit<Database['public']['Tables']['idempotency_keys']['Row'], 'created_at'>
         Update: Partial<Database['public']['Tables']['idempotency_keys']['Insert']>
+        Relationships: []
       }
       certificates: {
         Row: {
@@ -55,6 +84,7 @@ export interface Database {
           reading_hash: string; mint_tx_hash: string; anchor_tx_hash: string
           kwh: number; issued_at: string; retired: boolean
           retired_at: string | null; retired_by: string | null
+          retire_tx_hash: string | null
         }
         Insert: {
           cooperative_id: string; reading_id: string
@@ -67,16 +97,18 @@ export interface Database {
           reading_hash: string; mint_tx_hash: string; anchor_tx_hash: string
           kwh: number; issued_at: string; retired: boolean
           retired_at: string | null; retired_by: string | null
+          retire_tx_hash: string | null
         }>
-        Relationships: []
+        Relationships: [{ foreignKeyName: 'certificates_reading_id_fkey'; columns: ['reading_id']; referencedRelation: 'readings'; referencedColumns: ['id'] }]
       }
       webhook_endpoints: {
         Row: {
           id: string; cooperative_id: string; url: string; secret: string
           events: string[]; active: boolean; created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['webhook_endpoints']['Row'], 'id' | 'created_at'>
+        Insert: { cooperative_id: string; url: string; secret: string; events: string[]; active?: boolean }
         Update: Partial<Database['public']['Tables']['webhook_endpoints']['Insert']>
+        Relationships: []
       }
       webhook_logs: {
         Row: {
@@ -85,10 +117,56 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['webhook_logs']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['webhook_logs']['Insert']>
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          id: string; timestamp: string; actor: string; action: string
+          resource: string; resource_id: string | null; ip: string | null; metadata: Json | null
+        }
+        Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'timestamp'>
+        Update: Partial<Database['public']['Tables']['audit_logs']['Insert']>
+        Relationships: []
+      }
+      retirement_events: {
+        Row: {
+          id: string; certificate_id: string; beneficiary: string
+          retire_tx_hash: string; kwh: number; retired_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['retirement_events']['Row'], 'id' | 'retired_at'>
+        Update: Partial<Database['public']['Tables']['retirement_events']['Insert']>
+        Relationships: []
+      }
+      revoked_tokens: {
+        Row: { jti: string; expires_at: string }
+        Insert: { jti: string; expires_at: string }
+        Update: Partial<Database['public']['Tables']['revoked_tokens']['Insert']>
+        Relationships: []
+      }
+      jobs: {
+        Row: {
+          id: string; type: string; payload: Json; status: string
+          attempts: number; result: Json | null; error: string | null; created_at: string
+        }
+        Insert: { type: string; payload: Json; status: string; attempts: number }
+        Update: Partial<{
+          type: string; payload: Json; status: string; attempts: number
+          result: Json | null; error: string | null
+        }>
+        Relationships: []
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      get_cooperative_trends: {
+        Args: { target_cooperative_id: string; start_date: string; end_date: string; granularity: string }
+        Returns: { period: string; kwh: number; certs_issued: number; certs_retired: number }[]
+      }
+      get_cooperative_meter_stats: {
+        Args: { target_cooperative_id: string; start_date: string; end_date: string }
+        Returns: { meter_id: string; serial_number: string; name: string; total_kwh: number; reading_count: number }[]
+      }
+    }
     Enums: Record<string, never>
   }
 }

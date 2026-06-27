@@ -78,6 +78,7 @@ pub enum DataKey {
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u32)]
 pub enum Error {
     Unauthorized = 1,
     AlreadyAnchored = 2,
@@ -157,6 +158,9 @@ impl AuditRegistry {
     }
 
     /// Returns the current authorised API signer address.
+    ///
+    /// # Panics
+    /// * `"not initialized"` if the contract has not been initialised.
     pub fn api_signer(env: Env) -> soroban_sdk::Address {
         env.storage()
             .instance()
@@ -171,10 +175,29 @@ impl AuditRegistry {
         ((b0 << 8) | b1) % 1024
     }
 
-    /// Anchor a reading hash on-chain.
+    /// Anchor a reading hash on-chain. Only the registered `api_signer` may call this.
+    ///
+    /// # Arguments
+    /// * `caller`       — must equal the registered `api_signer`.
+    /// * `reading_hash` — 32-byte SHA-256 of `(meter_id || kwh_stroops_le || timestamp_le)`.
+    /// * `nonce`        — 32-byte unique value; prevents replay of the same anchor call.
+    ///
+    /// # Authorization
+    /// Requires `caller` authorisation. Returns `Err(Error::Unauthorized)` if
+    /// `caller` is not the registered `api_signer`.
+    ///
+    /// # Errors
+    /// * `Error::Unauthorized`    — caller is not the `api_signer`.
+    /// * `Error::AlreadyAnchored` — `reading_hash` or `nonce` was already used.
     ///
     /// # Events
-    /// Emits `(topic: "anchor", data: reading_hash)`.
+    /// Emits `(topic: "anchor", data: (reading_hash, ledger_sequence, ledger_timestamp))`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// client.anchor(&api_signer, &reading_hash, &nonce).unwrap();
+    /// assert!(client.is_anchored(&reading_hash));
+    /// ```
     pub fn anchor(
         env: Env,
         caller: soroban_sdk::Address,
@@ -235,6 +258,13 @@ impl AuditRegistry {
     }
 
     /// Returns the `AuditAnchor` for `reading_hash`, or `None` if not anchored.
+    ///
+    /// # Example
+    /// ```ignore
+    /// if let Some(anchor) = client.verify(&hash) {
+    ///     println!("anchored at ledger {}", anchor.anchored_at_ledger);
+    /// }
+    /// ```
     pub fn verify(env: Env, reading_hash: BytesN<32>) -> Option<AuditAnchor> {
         let bucket_id = Self::get_bucket_id(&reading_hash);
         let bucket: Map<BytesN<32>, u32> = env.storage().persistent().get(&DataKey::Bucket(bucket_id))?;
@@ -264,11 +294,79 @@ impl AuditRegistry {
     }
 
     /// Returns the admin address.
+    ///
+    /// # Panics
+    /// * `"not initialized"` if the contract has not been initialised.
     pub fn admin(env: Env) -> soroban_sdk::Address {
         env.storage()
             .instance()
             .get(&DataKey::Admin)
             .expect("not initialized")
+    }
+
+    fn require_admin(env: &Env) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("not initialized");
+        admin.require_auth();
+    }
+
+    /// Extend the TTL for a single persistent bucket entry.
+    ///
+    /// This is admin-only and should be used to keep bucketed anchor storage
+    /// alive on long-lived networks.
+    pub fn extend_bucket_ttl(env: Env, bucket_id: u32, threshold: u32, extend_to: u32) {
+        Self::require_admin(&env);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Bucket(bucket_id), threshold, extend_to);
+    }
+
+    /// Extend the TTL for a single persistent bucket entry with limits.
+    ///
+    /// The extension only happens if it exceeds `min_extension` ledgers and the
+    /// result will not exceed `max_extension` ledgers.
+    pub fn extend_bucket_ttl_with_limits(
+        env: Env,
+        bucket_id: u32,
+        extend_to: u32,
+        min_extension: u32,
+        max_extension: u32,
+    ) {
+        Self::require_admin(&env);
+        env.storage().persistent().extend_ttl_with_limits(
+            &DataKey::Bucket(bucket_id),
+            extend_to,
+            min_extension,
+            max_extension,
+        );
+    }
+
+    /// Extend the TTL of the contract instance and code.
+    ///
+    /// This is admin-only and should be used to keep the contract itself alive
+    /// alongside persistent bucket entries.
+    pub fn extend_contract_ttl(env: Env, threshold: u32, extend_to: u32) {
+        Self::require_admin(&env);
+        env.storage().instance().extend_ttl(threshold, extend_to);
+    }
+
+    /// Extend the TTL of the contract instance and code with limits.
+    ///
+    /// The extension only happens if it exceeds `min_extension` ledgers and the
+    /// result will not exceed `max_extension` ledgers.
+    pub fn extend_contract_ttl_with_limits(
+        env: Env,
+        extend_to: u32,
+        min_extension: u32,
+        max_extension: u32,
+    ) {
+        Self::require_admin(&env);
+        env.storage()
+            .instance()
+            .extend_ttl_with_limits(extend_to, min_extension, max_extension);
     }
 }
 
@@ -305,7 +403,7 @@ mod tests {
         let (env, api_signer, client) = setup();
         let h = hash(&env);
         let n = make_nonce(&env, 1);
-        client.anchor(&api_signer, &h, &n).unwrap();
+        client.anchor(&api_signer, &h, &n);
         assert!(client.is_anchored(&h));
         assert_eq!(client.total_anchors(), 1);
         let anchor = client.verify(&h).unwrap();
@@ -317,7 +415,7 @@ mod tests {
         let (env, api_signer, client) = setup();
         let h = hash(&env);
         let n = make_nonce(&env, 1);
-        client.anchor(&api_signer, &h, &n).unwrap();
+        client.anchor(&api_signer, &h, &n);
         let anchor = client.verify(&h).unwrap();
         let _ = anchor.anchored_at_ledger;
     }
@@ -328,8 +426,11 @@ mod tests {
         let h = hash(&env);
         let n1 = make_nonce(&env, 1);
         let n2 = make_nonce(&env, 2);
-        client.anchor(&api_signer, &h, &n1).unwrap();
-        assert_eq!(client.anchor(&api_signer, &h, &n2), Err(Error::AlreadyAnchored));
+        client.anchor(&api_signer, &h, &n1);
+        assert_eq!(
+            client.try_anchor(&api_signer, &h, &n2),
+            Err(Ok(Error::AlreadyAnchored))
+        );
     }
 
     #[test]
@@ -338,8 +439,11 @@ mod tests {
         let h1 = BytesN::from_array(&env, &[1u8; 32]);
         let h2 = BytesN::from_array(&env, &[2u8; 32]);
         let n = make_nonce(&env, 1);
-        client.anchor(&api_signer, &h1, &n).unwrap();
-        assert_eq!(client.anchor(&api_signer, &h2, &n), Err(Error::AlreadyAnchored));
+        client.anchor(&api_signer, &h1, &n);
+        assert_eq!(
+            client.try_anchor(&api_signer, &h2, &n),
+            Err(Ok(Error::AlreadyAnchored))
+        );
     }
 
     #[test]
@@ -348,8 +452,8 @@ mod tests {
         let h = hash(&env);
         let n1 = make_nonce(&env, 1);
         let n2 = make_nonce(&env, 2);
-        client.anchor(&api_signer, &h, &n1).unwrap();
-        let _ = client.anchor(&api_signer, &h, &n2);
+        client.anchor(&api_signer, &h, &n1);
+        let _ = client.try_anchor(&api_signer, &h, &n2);
         assert_eq!(client.total_anchors(), 1);
     }
 
@@ -358,8 +462,8 @@ mod tests {
         let (env, api_signer, client) = setup();
         let h1 = BytesN::from_array(&env, &[0xAAu8; 32]);
         let h2 = BytesN::from_array(&env, &[0xBBu8; 32]);
-        client.anchor(&api_signer, &h1, &make_nonce(&env, 1)).unwrap();
-        client.anchor(&api_signer, &h2, &make_nonce(&env, 2)).unwrap();
+        client.anchor(&api_signer, &h1, &make_nonce(&env, 1));
+        client.anchor(&api_signer, &h2, &make_nonce(&env, 2));
         assert!(client.is_anchored(&h1));
         assert!(client.is_anchored(&h2));
         assert_eq!(client.total_anchors(), 2);
@@ -370,8 +474,8 @@ mod tests {
         let (env, _api_signer, client) = setup();
         let attacker = soroban_sdk::Address::generate(&env);
         assert_eq!(
-            client.anchor(&attacker, &hash(&env), &make_nonce(&env, 1)),
-            Err(Error::Unauthorized)
+            client.try_anchor(&attacker, &hash(&env), &make_nonce(&env, 1)),
+            Err(Ok(Error::Unauthorized))
         );
     }
 
@@ -381,8 +485,8 @@ mod tests {
         let new_signer = soroban_sdk::Address::generate(&env);
         client.set_api_signer(&new_signer);
         assert_eq!(
-            client.anchor(&old_signer, &hash(&env), &make_nonce(&env, 1)),
-            Err(Error::Unauthorized)
+            client.try_anchor(&old_signer, &hash(&env), &make_nonce(&env, 1)),
+            Err(Ok(Error::Unauthorized))
         );
     }
 
@@ -407,8 +511,7 @@ mod tests {
         let (env, api_signer, client) = setup();
         for i in 0u8..5 {
             client
-                .anchor(&api_signer, &BytesN::from_array(&env, &[i; 32]), &make_nonce(&env, i))
-                .unwrap();
+                .anchor(&api_signer, &BytesN::from_array(&env, &[i; 32]), &make_nonce(&env, i));
         }
         assert_eq!(client.total_anchors(), 5);
     }
@@ -432,7 +535,7 @@ mod tests {
         let count: u8 = 50;
         for i in 0..count {
             let h = BytesN::from_array(&env, &[i; 32]);
-            client.anchor(&api_signer, &h, &make_nonce(&env, i)).unwrap();
+            client.anchor(&api_signer, &h, &make_nonce(&env, i));
         }
         assert_eq!(client.total_anchors(), u32::from(count));
         assert!(client.is_anchored(&BytesN::from_array(&env, &[0u8; 32])));
@@ -444,8 +547,8 @@ mod tests {
         let (env, api_signer, client) = setup();
         let all_zeros = BytesN::from_array(&env, &[0x00u8; 32]);
         let all_ones = BytesN::from_array(&env, &[0xFFu8; 32]);
-        client.anchor(&api_signer, &all_zeros, &make_nonce(&env, 1)).unwrap();
-        client.anchor(&api_signer, &all_ones, &make_nonce(&env, 2)).unwrap();
+        client.anchor(&api_signer, &all_zeros, &make_nonce(&env, 1));
+        client.anchor(&api_signer, &all_ones, &make_nonce(&env, 2));
         assert!(client.is_anchored(&all_zeros));
         assert!(client.is_anchored(&all_ones));
         assert_eq!(client.total_anchors(), 2);
@@ -466,7 +569,7 @@ mod tests {
         let new_signer = soroban_sdk::Address::generate(&env);
         client.set_api_signer(&new_signer);
         let h = hash(&env);
-        client.anchor(&new_signer, &h, &make_nonce(&env, 1)).unwrap();
+        client.anchor(&new_signer, &h, &make_nonce(&env, 1));
         assert!(client.is_anchored(&h));
     }
 
@@ -488,6 +591,34 @@ mod tests {
     }
 
     #[test]
+    fn test_extend_bucket_ttl() {
+        let (env, api_signer, client) = setup();
+        let h = hash(&env);
+        let n = make_nonce(&env, 1);
+        client.anchor(&api_signer, &h, &n).unwrap();
+        let bucket_id = AuditRegistry::get_bucket_id(&h);
+        let before = env
+            .storage()
+            .persistent()
+            .get_ttl(&DataKey::Bucket(bucket_id));
+        client.extend_bucket_ttl(bucket_id, u32::MAX, before + 50);
+        let after = env
+            .storage()
+            .persistent()
+            .get_ttl(&DataKey::Bucket(bucket_id));
+        assert!(after >= before);
+    }
+
+    #[test]
+    fn test_extend_contract_ttl() {
+        let (env, _api_signer, client) = setup();
+        let before = env.storage().instance().get_ttl();
+        client.extend_contract_ttl(u32::MAX, before + 50);
+        let after = env.storage().instance().get_ttl();
+        assert!(after >= before);
+    }
+
+    #[test]
     fn test_issue_281_bucket_collision() {
         let (env, api_signer, client) = setup();
         // Force hashes that likely end up in the same bucket
@@ -501,11 +632,21 @@ mod tests {
         h2_arr[2] = 2;
         let h2 = BytesN::from_array(&env, &h2_arr);
         
-        client.anchor(&api_signer, &h1, &make_nonce(&env, 1)).unwrap();
-        client.anchor(&api_signer, &h2, &make_nonce(&env, 2)).unwrap();
+        client.anchor(&api_signer, &h1, &make_nonce(&env, 1));
+        client.anchor(&api_signer, &h2, &make_nonce(&env, 2));
         
         assert!(client.is_anchored(&h1));
         assert!(client.is_anchored(&h2));
         assert_eq!(client.total_anchors(), 2);
     }
+
+    #[test]
+    fn test_admin_lookup() {
+        let (env, client) = setup();
+        let admin = client.admin();
+        assert_eq!(admin, Address::generate(&env));
+    }
 }
+
+#[cfg(test)]
+mod verify_integration_test;

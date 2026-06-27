@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createServiceClient } from '@/lib/supabase'
+import { createAnonClient } from '@/lib/supabase'
 import { getCachedCert, setCachedCert } from '@/lib/cache'
 import { stellarExplorerUrl, type NetworkName } from '@solarproof/stellar'
 import { env } from '@/env'
+import { checkRateLimit as checkIpRateLimit, getClientIp } from '@/lib/rate-limit'
+
+// IP rate limit: 30 GETs per 60 s per IP
+const IP_RATE_LIMIT = 30
+const IP_RATE_WINDOW_MS = 60_000
 
 // UUID or 64-char hex hash (reading_hash / tx_hash)
 const VerifyQuerySchema = z.object({
-  id: z.string().regex(/^[0-9a-f]{64}$|^[0-9a-f-]{36}$/i, 'id must be a UUID or 64-char hex hash'),
+  id: z.string().trim().regex(/^[0-9a-f]{64}$|^[0-9a-f-]{36}$/i, 'id must be a UUID or 64-char hex hash'),
 })
 
 /**
@@ -18,7 +23,27 @@ const VerifyQuerySchema = z.object({
  * Results are cached in Redis for 60 s (TTL defined in cache.ts).
  */
 export async function GET(req: NextRequest) {
-  const parsed = VerifyQuerySchema.safeParse({ id: req.nextUrl.searchParams.get('id')?.trim() })
+  // IP-based rate limit: 30 requests / 60 s per IP
+  const ip = getClientIp(req)
+  const ipRl = checkIpRateLimit(`ip:verify:${ip}`, IP_RATE_LIMIT, IP_RATE_WINDOW_MS)
+  if (!ipRl.allowed) {
+    const retryAfter = Math.ceil((ipRl.resetAt - Date.now()) / 1000)
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.', retryAfter },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(retryAfter),
+          'X-RateLimit-Limit': String(IP_RATE_LIMIT),
+          'X-RateLimit-Remaining': String(ipRl.remaining),
+          'X-RateLimit-Reset': String(Math.ceil(ipRl.resetAt / 1000)),
+        },
+      }
+    )
+  }
+
+  const queryParams = Object.fromEntries(req.nextUrl.searchParams.entries())
+  const parsed = VerifyQuerySchema.safeParse(queryParams)
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
@@ -37,7 +62,7 @@ export async function GET(req: NextRequest) {
 
   // Try certificate ID first, then reading_hash, then mint_tx_hash
   // Use separate parameterised filters instead of raw .or() interpolation
-  const db = createServiceClient()
+  const db = createAnonClient()
   let cert = null
   for (const column of ['id', 'reading_hash', 'mint_tx_hash'] as const) {
     const { data } = await db.from('certificates').select('*').eq(column, id).maybeSingle()
