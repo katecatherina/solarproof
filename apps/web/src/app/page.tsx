@@ -22,10 +22,10 @@ export default function HomePage() {
           Every kWh signed at the meter · anchored on-chain · publicly verifiable
         </p>
         <div className="flex justify-center gap-4">
-          <Link href="/verify" className="rounded-lg bg-yellow-400 px-6 py-3 font-medium text-gray-900 hover:bg-yellow-500">
+          <Link href="/verify" className="rounded-lg bg-yellow-400 px-6 py-3 font-medium text-gray-900 hover:bg-yellow-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400">
             Verify a Certificate
           </Link>
-          <Link href="/dashboard" className="rounded-lg border border-gray-300 px-6 py-3 font-medium text-gray-700 hover:bg-gray-50">
+          <Link href="/dashboard" className="rounded-lg border border-gray-300 px-6 py-3 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400">
             Dashboard
           </Link>
         </div>

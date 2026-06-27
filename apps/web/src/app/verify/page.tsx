@@ -53,35 +53,40 @@ export default function VerifyPage() {
         </div>
       </div>
 
-      <form onSubmit={handleVerify} className="mb-8 flex gap-2">
+      <form onSubmit={handleVerify} className="mb-8 flex gap-2" role="search" aria-label="Certificate verifier">
+        <label htmlFor="verify-input" className="sr-only">Certificate ID, reading hash, or transaction hash</label>
         <input
+          id="verify-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Certificate ID, reading hash, or tx hash…"
-          className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          aria-describedby="verify-hint"
+          className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400"
         />
         <button
           type="submit"
           disabled={loading}
-          className="flex items-center gap-2 rounded-lg bg-yellow-400 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-yellow-500 disabled:opacity-50"
+          aria-busy={loading}
+          className="flex items-center gap-2 rounded-lg bg-yellow-400 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-yellow-500 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400"
         >
-          <Search className="h-4 w-4" />
+          <Search className="h-4 w-4" aria-hidden="true" />
           {loading ? 'Verifying…' : 'Verify'}
         </button>
       </form>
+      <p id="verify-hint" className="sr-only">Enter a certificate ID, reading hash, or transaction hash to verify the chain of custody.</p>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <XCircle className="h-4 w-4 shrink-0" />
+        <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <XCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </div>
       )}
 
       {result && (
-        <div className="space-y-4">
+        <div aria-live="polite" className="space-y-4">
           {/* Status */}
           <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-4">
-            <CheckCircle className="h-5 w-5 text-green-600" />
+            <CheckCircle className="h-5 w-5 text-green-600" aria-hidden="true" />
             <span className="font-medium text-green-800">
               Certificate verified — full chain of custody confirmed
             </span>
@@ -133,8 +138,8 @@ function Row({ label, value, mono, link }: { label: string; value: string; mono?
       <span className="shrink-0 text-gray-500">{label}</span>
       {link ? (
         <a href={link} target="_blank" rel="noopener noreferrer"
-          className={`flex items-center gap-1 text-right text-blue-600 hover:underline ${mono ? 'font-mono text-xs' : ''}`}>
-          {value} <ExternalLink className="h-3 w-3" />
+          className={`flex items-center gap-1 text-right text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 rounded ${mono ? 'font-mono text-xs' : ''}`}>
+          {value} <ExternalLink className="h-3 w-3" aria-hidden="true" />
         </a>
       ) : (
         <span className={`text-right text-gray-900 ${mono ? 'font-mono text-xs' : ''}`}>{value}</span>
