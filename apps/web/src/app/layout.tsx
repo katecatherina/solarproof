@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { headers } from 'next/headers'
 import './globals.css'
 import { Providers } from './providers'
 import { Navbar } from '@/components/navbar'
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/middleware'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,9 +20,15 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const headerList = await headers()
+  const rawLocale = headerList.get('x-locale') ?? DEFAULT_LOCALE
+  const locale: Locale = SUPPORTED_LOCALES.includes(rawLocale as Locale)
+    ? (rawLocale as Locale)
+    : DEFAULT_LOCALE
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
           <Navbar />
