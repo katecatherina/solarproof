@@ -14,12 +14,38 @@ on:
         options: [testnet, mainnet]
 
 jobs:
+  # Push-triggered deploys are testnet-only; mainnet requires workflow_dispatch.
+  guard-mainnet:
+    name: Block mainnet on push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.event.inputs.network == 'mainnet'
+    steps:
+      - name: Reject mainnet on push
+        run: |
+          echo "::error::Direct push to main cannot trigger a mainnet deploy. Use workflow_dispatch and obtain approver sign-off."
+          exit 1
+
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    # The 'mainnet' GitHub Environment requires manual approval from a reviewer
+    # before this job runs (configure required reviewers in Settings → Environments).
     environment: ${{ github.event.inputs.network || 'testnet' }}
+    needs: []
+    # Skip this job entirely if the guard above would have fired
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.event.inputs.network != 'mainnet')
     steps:
       - uses: actions/checkout@v4
+
+      - name: Confirm mainnet deployment
+        if: github.event.inputs.network == 'mainnet'
+        run: |
+          echo "::warning::Deploying to MAINNET. This job was approved by a required reviewer via the 'mainnet' GitHub Environment."
+          echo "Deployer: ${{ github.actor }}"
+          echo "Triggered at: ${{ github.event.head_commit.timestamp || github.event.created_at }}"
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
