@@ -155,4 +155,41 @@ mod tests {
         client.mint(&user, &10_i128);
         client.burn(&user, &100_i128);
     }
+
+    // --- Invariant: zero and negative amounts must be rejected ---
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_mint_zero_rejected() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &0_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_mint_negative_rejected() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &-1_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_burn_zero_rejected() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &100_i128);
+        client.burn(&user, &0_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_transfer_zero_rejected() {
+        let (env, client) = setup();
+        let a = Address::generate(&env);
+        let b = Address::generate(&env);
+        client.mint(&a, &100_i128);
+        client.transfer(&a, &b, &0_i128);
+    }
 }
