@@ -1,3 +1,16 @@
+## [1.25.1](https://github.com/AnnabelJoe/solarproof/compare/v1.25.0...v1.25.1) (2026-06-27)
+
+### Bug Fixes
+
+* **a11y:** accessible modal dismissal for retire and transfer modals ([#483](https://github.com/AnnabelJoe/solarproof/issues/483)) ([2580a4c](https://github.com/AnnabelJoe/solarproof/commit/2580a4c9b103d52e03d9aac3e4d03e6ff401f862))
+* **a11y:** accessible proof steps on verify page ([#480](https://github.com/AnnabelJoe/solarproof/issues/480)) ([a2b83fc](https://github.com/AnnabelJoe/solarproof/commit/a2b83fccf4e7f864c60b059b4c086f56f8051aba))
+* **a11y:** keyboard support and accessible announcement for language selector ([#486](https://github.com/AnnabelJoe/solarproof/issues/486)) ([75647f4](https://github.com/AnnabelJoe/solarproof/commit/75647f4581a61224c150a6291b9cbdbe9a10c4ff))
+
+### Documentation
+
+* add accessibility audit documentation ([#489](https://github.com/AnnabelJoe/solarproof/issues/489)) ([f8c212c](https://github.com/AnnabelJoe/solarproof/commit/f8c212c25e44e30a10ea6c5abefccba47bd35239)), closes [#483](https://github.com/AnnabelJoe/solarproof/issues/483) [#533](https://github.com/AnnabelJoe/solarproof/issues/533) [#541](https://github.com/AnnabelJoe/solarproof/issues/541)
+* add data classification and retention policy for Supabase ([#526](https://github.com/AnnabelJoe/solarproof/issues/526)) ([f2175f6](https://github.com/AnnabelJoe/solarproof/commit/f2175f602d84405cd7e83d426fabfa5cfb381d16))
+
 ## [1.25.0](https://github.com/AnnabelJoe/solarproof/compare/v1.24.0...v1.25.0) (2026-06-26)
 
 ### Features
