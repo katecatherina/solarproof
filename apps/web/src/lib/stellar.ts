@@ -5,7 +5,6 @@ import { env } from '@/env'
 import { createHash } from 'crypto'
 
 const NETWORK_PASSPHRASE = Networks.TESTNET
-const RPC_URL = 'https://soroban-testnet.stellar.org'
 const RPC_TIMEOUT_MS = 10_000
 
 // ---------------------------------------------------------------------------
@@ -106,10 +105,6 @@ async function rpcCall<T>(fn: () => Promise<T>, correlationId: string): Promise<
   }
 }
 
-/** Delays that grow as 1 s, 2 s, 4 s for attempts 1, 2, 3. */
-const BACKOFF_MS = [1_000, 2_000, 4_000]
-const MAX_RETRIES = 3
-
 /** Return a Soroban RPC server pointed at the configured testnet endpoint. */
 function getServer() {
   return new SorobanRpc.Server(env.NEXT_PUBLIC_STELLAR_RPC_URL)
@@ -151,7 +146,7 @@ export async function anchorReading(params: {
   correlationId?: string
 }): Promise<string> {
   const correlationId = params.correlationId ?? crypto.randomUUID()
-  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY)
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY!)
   const server = getServer()
   const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
   const contract = new Contract(env.NEXT_PUBLIC_AUDIT_REGISTRY_ID)
@@ -184,7 +179,7 @@ export async function retireCertificate(
   kwh: number,
   correlationId = crypto.randomUUID()
 ): Promise<string> {
-  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY)
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY!)
   const server = getServer()
   const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
   const contract = new Contract(env.NEXT_PUBLIC_ENERGY_TOKEN_ID)
@@ -237,6 +232,39 @@ export async function assertMintable(recipientAddress: string): Promise<void> {
 }
 
 /**
+ * Transfer energy certificates from one account to another via SEP-41 transfer.
+ *
+ * @param fromAddress - Stellar G-address of the current certificate holder.
+ * @param toAddress - Stellar G-address of the recipient.
+ * @param kwh - Amount to transfer in kilowatt-hours.
+ * @param correlationId - Optional trace ID for logs and error messages.
+ * @returns Stellar transaction hash of the transfer transaction.
+ */
+export async function transferCertificate(
+  fromAddress: string,
+  toAddress: string,
+  kwh: number,
+  correlationId = crypto.randomUUID()
+): Promise<string> {
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY!)
+  const server = getServer()
+  const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
+  const contract = new Contract(env.NEXT_PUBLIC_ENERGY_TOKEN_ID)
+
+  const tx = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: NETWORK_PASSPHRASE })
+    .addOperation(contract.call(
+      'transfer',
+      addressToScVal(fromAddress),
+      addressToScVal(toAddress),
+      amountToScVal(kwhToStroops(kwh))
+    ))
+    .setTimeout(30)
+    .build()
+
+  return submitTx(tx, minter, correlationId)
+}
+
+/**
  * Mint energy certificates after a successful anchor.
  *
  * Calls `energy_token.mint(recipient, amount_in_stroops)`. The recipient
@@ -254,7 +282,7 @@ export async function mintCertificates(
   kwh: number,
   correlationId = crypto.randomUUID()
 ): Promise<string> {
-  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY)
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY!)
   const server = getServer()
   const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
   const contract = new Contract(env.NEXT_PUBLIC_ENERGY_TOKEN_ID)

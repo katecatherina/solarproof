@@ -41,6 +41,24 @@ stellar contract invoke --id <CONTRACT_ID> -- mint \
   --amount 10000000
 ```
 
+## Debugging with tracer-sim
+
+Use `stellar contract invoke --send=no` to simulate a contract call without submitting
+it to the network. This is useful for checking authorization, transaction cost,
+and whether the function will succeed before sending the final transaction.
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no -- mint --to GABC...XYZ --amount 10000000
+```
+
+To print estimated execution cost to stderr:
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> --source YOUR_SECRET --network testnet \
+  --send=no --cost -- mint --to GABC...XYZ --amount 10000000
+```
+
 ---
 
 ### `burn(env, from, amount)`
@@ -101,6 +119,36 @@ Replaces the authorized minter. Requires `admin` auth.
 
 ---
 
+### `pause(env)`
+
+Pauses the contract. When paused, all state-changing operations are blocked.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `env` | `Env` | Contract environment |
+
+Requires `admin` auth.
+
+---
+
+### `unpause(env)`
+
+Unpauses the contract and restores normal operation.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `env` | `Env` | Contract environment |
+
+Requires `admin` auth.
+
+---
+
+### `paused(env) → bool`
+
+Returns `true` if the contract is currently paused.
+
+---
+
 ### `admin(env) → Address`
 
 Returns the admin address.
@@ -134,7 +182,7 @@ Returns `7`.
 ---
 
 ## Events
-
+These events are emitted to the Soroban ledger as transaction log entries and can be consumed by indexers or frontend services. Consumers should filter on the event topic to track token lifecycle activity.
 | Topic | Data | Emitted by |
 |---|---|---|
 | `"mint"` | `(to: Address, amount: i128)` | `mint` |

@@ -7,10 +7,24 @@ import { useTheme } from 'next-themes'
 import { useEffect, useRef, useState } from 'react'
 import { useWallet } from '@/hooks/useWallet'
 import { env } from '@/env'
+import { CopyButton } from '@/components/copy-button'
+import { LanguageSwitcher } from '@/components/language-switcher'
+
+import { useTranslations } from 'next-intl'
+import type { Locale } from '@/lib/locales'
 
 interface NavbarProps {
   locale: Locale
 }
+
+const links = [
+  { href: '/', labelKey: 'dashboard' },
+  { href: '/meters', labelKey: 'meters' },
+  { href: '/certificates', labelKey: 'certificates' },
+  { href: '/governance', labelKey: 'governance' },
+  { href: '/verify', labelKey: 'verify' },
+  { href: '/admin', labelKey: 'admin' },
+]
 
 const network = env.NEXT_PUBLIC_STELLAR_NETWORK
 
@@ -26,18 +40,26 @@ function NetworkBadge() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`Stellar ${isMainnet ? 'Mainnet' : 'Testnet'} — view network info`}
-      className={`hidden items-center rounded-full px-2 py-0.5 text-xs font-semibold md:flex ${
+      title={isMainnet ? 'Connected to Stellar Mainnet' : 'Connected to Stellar Testnet — not a production environment'}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
         isMainnet
           ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
           : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
       }`}
     >
+      <span
+        aria-hidden="true"
+        className={`h-1.5 w-1.5 rounded-full ${
+          isMainnet ? 'bg-green-500' : 'animate-pulse bg-yellow-500'
+        }`}
+      />
       {isMainnet ? 'Mainnet' : 'Testnet'}
     </a>
   )
 }
 
-export function Navbar() {
+export function Navbar({ locale }: NavbarProps) {
+  const t = useTranslations('nav')
   const pathname = usePathname()
   const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -50,6 +72,10 @@ export function Navbar() {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  function toggleTheme() {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
+  }
 
   // Close menu on route change
   useEffect(() => { setMenuOpen(false) }, [pathname])
@@ -126,7 +152,7 @@ export function Navbar() {
                     : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
                 }`}
               >
-                {l.label}
+                {t(l.labelKey as Parameters<typeof t>[0])}
               </Link>
             )
           })}
@@ -148,7 +174,7 @@ export function Navbar() {
                 <CopyButton value={address} label={`Copy wallet address ${address}`} iconSize={12} />
                 <button
                   onClick={disconnect}
-                  aria-label="Disconnect wallet"
+                  aria-label={t('disconnectWallet')}
                   title="Disconnect"
                   className="ml-0.5 rounded p-0.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-200"
                 >
@@ -173,8 +199,8 @@ export function Navbar() {
             aria-label={
               mounted
                 ? resolvedTheme === 'dark'
-                  ? 'Switch to light mode'
-                  : 'Switch to dark mode'
+                  ? t('switchLight')
+                  : t('switchDark')
                 : 'Toggle theme'
             }
             className="rounded-md p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
@@ -198,16 +224,6 @@ export function Navbar() {
             {menuOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center justify-center rounded-full border border-gray-200 bg-white p-2 text-gray-700 transition hover:bg-gray-50 md:hidden"
-          aria-label="Open mobile menu"
-          aria-expanded={open}
-        >
-          <Menu className="h-5 w-5" aria-hidden="true" />
-        </button>
       </div>
 
       {/* Mobile menu */}
@@ -235,12 +251,52 @@ export function Navbar() {
                           : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'
                       }`}
                     >
-                      {l.label}
+                      {t(l.labelKey as Parameters<typeof t>[0])}
                     </Link>
                   </li>
                 )
               })}
             </ul>
+
+            <div className="mt-4 rounded-2xl bg-gray-50 p-3 dark:bg-gray-950/80">
+              <div className="flex flex-wrap items-center gap-2">
+                <NetworkBadge />
+                <button
+                  onClick={toggleTheme}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                >
+                  {mounted && resolvedTheme === 'dark' ? 'Light mode' : 'Dark mode'}
+                </button>
+              </div>
+
+              {mounted && !walletLoading && (
+                <div className="mt-3 space-y-2">
+                  {connected && address ? (
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Wallet connected</p>
+                      <p className="mt-1 font-mono text-sm text-gray-900 dark:text-gray-100">{address.slice(0, 4)}…{address.slice(-4)}</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <CopyButton value={address} label={`Copy wallet address ${address}`} iconSize={12} />
+                        <button
+                          onClick={disconnect}
+                          className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-800"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => connect().catch(() => {})}
+                      className="w-full rounded-lg bg-yellow-400 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-yellow-500"
+                    >
+                      {t('connectWallet')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Language switcher in mobile menu */}
             <div className="mt-3 px-3">
               <LanguageSwitcher current={locale} />
