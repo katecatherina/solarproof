@@ -13,7 +13,7 @@ interface CheckResult {
   error?: string
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('timeout')), ms)

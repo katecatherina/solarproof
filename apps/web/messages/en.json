@@ -5,6 +5,7 @@
     "certificates": "Certificates",
     "governance": "Governance",
     "verify": "Verify",
+    "admin": "Admin",
     "connectWallet": "Connect wallet",
     "disconnectWallet": "Disconnect wallet",
     "openMenu": "Open navigation menu",
@@ -72,5 +73,11 @@
         "daysInvalid": "Enter a number between 1 and 30."
       }
     }
+  }
+  ,
+  "walletGate": {
+    "title": "Wallet required",
+    "description": "Connect your Freighter wallet to access this page.",
+    "connect": "Connect wallet"
   }
 }

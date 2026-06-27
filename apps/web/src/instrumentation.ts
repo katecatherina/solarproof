@@ -40,7 +40,7 @@ export async function register() {
       [SEMRESATTRS_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? 'solarproof-api',
       [SEMRESATTRS_SERVICE_VERSION]: process.env.npm_package_version ?? '1.0.0',
     }),
-    spanProcessor: new SimpleSpanProcessor(exporter),
+    spanProcessor: new SimpleSpanProcessor(exporter) as never,
     instrumentations: [
       new HttpInstrumentation(),
       new FetchInstrumentation(),
@@ -48,4 +48,8 @@ export async function register() {
   })
 
   sdk.start()
+
+  // Start the BullMQ worker for async Stellar transaction processing
+  const { startWorker } = await import(/* webpackIgnore: true */ '@/lib/queue')
+  startWorker()
 }
