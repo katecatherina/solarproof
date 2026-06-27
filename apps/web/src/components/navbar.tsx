@@ -40,12 +40,19 @@ function NetworkBadge() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`Stellar ${isMainnet ? 'Mainnet' : 'Testnet'} — view network info`}
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+      title={isMainnet ? 'Connected to Stellar Mainnet' : 'Connected to Stellar Testnet — not a production environment'}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
         isMainnet
           ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
           : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
       }`}
     >
+      <span
+        aria-hidden="true"
+        className={`h-1.5 w-1.5 rounded-full ${
+          isMainnet ? 'bg-green-500' : 'animate-pulse bg-yellow-500'
+        }`}
+      />
       {isMainnet ? 'Mainnet' : 'Testnet'}
     </a>
   )
