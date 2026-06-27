@@ -46,7 +46,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-          components: rustfmt, clippy
+          components: rustfmt, clippy, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/contracts
@@ -56,6 +56,27 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
         working-directory: apps/contracts
-      - name: test
-        run: cargo test --all
+
+      # Run each contract's tests individually so failures are easy to pinpoint
+      - name: test — energy_token
+        run: cargo test -p energy_token --all-features
         working-directory: apps/contracts
+      - name: test — audit_registry
+        run: cargo test -p audit_registry --all-features
+        working-directory: apps/contracts
+      - name: test — community_governance
+        run: cargo test -p community_governance --all-features
+        working-directory: apps/contracts
+
+      # Coverage via cargo-llvm-cov (installed from crates.io)
+      - name: install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: coverage
+        run: cargo llvm-cov --all --lcov --output-path lcov.info
+        working-directory: apps/contracts
+      - name: upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-coverage
+          path: apps/contracts/lcov.info
+          retention-days: 14
