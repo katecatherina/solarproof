@@ -1,0 +1,78 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Every Monday at 08:00 UTC
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # ── JavaScript / pnpm ──────────────────────────────────────────────────────
+  update-js:
+    name: Update JS dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Update non-breaking JS deps
+        run: pnpm update --recursive --latest --prod
+        # '--latest' bumps within the semver range; fine for patch/minor updates.
+        # Remove '--prod' to include devDependencies.
+
+      - name: Create PR for JS updates
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): update JS dependencies"
+          branch: deps/js-updates
+          delete-branch: true
+          title: "chore(deps): update JS dependencies"
+          body: |
+            Automated JS dependency updates via `pnpm update --recursive --latest`.
+
+            Triggered by: ${{ github.event_name }}
+          labels: dependencies
+
+  # ── Rust / Cargo ───────────────────────────────────────────────────────────
+  update-rust:
+    name: Update Rust dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/contracts
+
+      - name: Update Cargo dependencies
+        run: cargo update
+        working-directory: apps/contracts
+
+      - name: Create PR for Rust updates
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): update Rust dependencies"
+          branch: deps/rust-updates
+          delete-branch: true
+          title: "chore(deps): update Rust dependencies"
+          body: |
+            Automated Rust dependency updates via `cargo update`.
+
+            Triggered by: ${{ github.event_name }}
+          labels: dependencies
