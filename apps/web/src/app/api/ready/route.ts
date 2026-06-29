@@ -1,21 +1,14 @@
 import { NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { checkDatabase, checkStellarRpc } from '@/app/api/health/route'
 
 export async function GET() {
-  const checks: Record<string, boolean> = {}
+  const [db, stellar] = await Promise.all([checkDatabase(), checkStellarRpc()])
 
-  // DB check
-  try {
-    const db = createServiceClient()
-    const { error } = await db.from('meters').select('id').limit(1)
-    checks.db = !error
-  } catch {
-    checks.db = false
-  }
+  // For readiness we require all critical dependencies to be fully OK
+  const healthy = db.status === 'ok' && stellar.status === 'ok'
 
-  const healthy = Object.values(checks).every(Boolean)
   return NextResponse.json(
-    { status: healthy ? 'ok' : 'degraded', checks },
+    { status: healthy ? 'ok' : 'degraded', checks: { database: db, stellar_rpc: stellar } },
     { status: healthy ? 200 : 503 }
   )
 }
