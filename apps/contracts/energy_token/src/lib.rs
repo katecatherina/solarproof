@@ -1218,6 +1218,150 @@ mod tests {
         assert_eq!(from, user);
         assert_eq!(amount, 200_i128);
     }
+    // ── SEP-41 metadata & trustline edge-case tests (issue #560) ────────────────
+
+    #[test]
+    fn test_sep41_name_is_correct() {
+        let (env, client) = setup();
+        assert_eq!(client.name(), String::from_str(&env, "SolarProof kWh"));
+    }
+
+    #[test]
+    fn test_sep41_symbol_is_correct() {
+        let (env, client) = setup();
+        assert_eq!(client.symbol(), String::from_str(&env, "SKWH"));
+    }
+
+    #[test]
+    fn test_sep41_decimals_is_three() {
+        let (_, client) = setup();
+        assert_eq!(client.decimals(), 3_u32);
+    }
+
+    #[test]
+    fn test_sep41_zero_balance_unknown_account() {
+        // SEP-41 trustline default: an address that never received tokens has balance 0
+        let (env, client) = setup();
+        let unknown = Address::generate(&env);
+        assert_eq!(client.balance(&unknown), 0_i128);
+    }
+
+    #[test]
+    fn test_sep41_allowance_defaults_to_zero() {
+        // No prior approve call — allowance must default to 0
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender = Address::generate(&env);
+        assert_eq!(client.allowance(&owner, &spender), 0_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be non-negative")]
+    fn test_sep41_approve_negative_amount_panics() {
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender = Address::generate(&env);
+        client.approve(&owner, &spender, &-1_i128, &1000_u32);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_sep41_transfer_zero_amount_panics() {
+        let (env, client) = setup();
+        let a = Address::generate(&env);
+        let b = Address::generate(&env);
+        client.mint(&a, &100_i128);
+        client.transfer(&a, &b, &0_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_sep41_burn_zero_amount_panics() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &100_i128);
+        client.burn(&user, &0_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_sep41_transfer_from_zero_amount_panics() {
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender = Address::generate(&env);
+        let recipient = Address::generate(&env);
+        client.mint(&owner, &100_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
+        client.transfer_from(&spender, &owner, &recipient, &0_i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn test_sep41_burn_from_zero_amount_panics() {
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender = Address::generate(&env);
+        client.mint(&owner, &100_i128);
+        client.approve(&owner, &spender, &100_i128, &1000_u32);
+        client.burn_from(&spender, &owner, &0_i128);
+    }
+
+    #[test]
+    fn test_sep41_transfer_to_self() {
+        // Self-transfer must leave balance unchanged
+        let (env, client) = setup();
+        let a = Address::generate(&env);
+        client.mint(&a, &500_i128);
+        client.transfer(&a, &a, &200_i128);
+        assert_eq!(client.balance(&a), 500_i128);
+    }
+
+    #[test]
+    fn test_sep41_allowance_not_shared_between_spenders() {
+        // Two spenders must have independent allowances from the same owner
+        let (env, client) = setup();
+        let owner = Address::generate(&env);
+        let spender_a = Address::generate(&env);
+        let spender_b = Address::generate(&env);
+        client.approve(&owner, &spender_a, &300_i128, &1000_u32);
+        client.approve(&owner, &spender_b, &700_i128, &1000_u32);
+        assert_eq!(client.allowance(&owner, &spender_a), 300_i128);
+        assert_eq!(client.allowance(&owner, &spender_b), 700_i128);
+        // Changing spender_a's allowance must not affect spender_b's
+        client.approve(&owner, &spender_a, &0_i128, &1000_u32);
+        assert_eq!(client.allowance(&owner, &spender_a), 0_i128);
+        assert_eq!(client.allowance(&owner, &spender_b), 700_i128);
+    }
+
+    #[test]
+    fn test_sep41_total_supply_after_multiple_mints() {
+        // Each mint to a different recipient must accumulate in total_supply
+        let (env, client) = setup();
+        let r1 = Address::generate(&env);
+        let r2 = Address::generate(&env);
+        let r3 = Address::generate(&env);
+        client.mint(&r1, &1_000_i128);
+        client.mint(&r2, &2_500_i128);
+        client.mint(&r3, &500_i128);
+        assert_eq!(client.total_supply(), 4_000_i128);
+        assert_eq!(client.balance(&r1), 1_000_i128);
+        assert_eq!(client.balance(&r2), 2_500_i128);
+        assert_eq!(client.balance(&r3), 500_i128);
+    }
+
+    #[test]
+    fn test_sep41_decimals_conversion_1kwh() {
+        // decimals=3: 1000 token units represents exactly 1.000 kWh
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        client.mint(&user, &1_000_i128); // 1 kWh = 1000 units
+        assert_eq!(client.balance(&user), 1_000_i128);
+        assert_eq!(client.decimals(), 3_u32);
+        // 1000 / 10^3 = 1.000 kWh — verified by the decimals value
+        let units: i128 = client.balance(&user);
+        let kwh_scaled: i128 = units; // 1000 milli-kWh = 1 kWh
+        assert_eq!(kwh_scaled, 1_000_i128);
+    }
 }
 
 #[cfg(test)]
