@@ -52,4 +52,27 @@ export async function register() {
   // Start the BullMQ worker for async Stellar transaction processing
   const { startWorker } = await import(/* webpackIgnore: true */ '@/lib/queue')
   startWorker()
+
+  // --- Metrics (export to OTLP if configured) ---------------------------------
+  try {
+    const { MeterProvider } = await import('@opentelemetry/sdk-metrics')
+    const { OTLPMetricExporter } = await import('@opentelemetry/exporter-metrics-otlp-http')
+    const { PeriodicExportingMetricReader } = await import('@opentelemetry/sdk-metrics')
+
+    const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    if (otlpEndpoint) {
+      const exporter = new OTLPMetricExporter({ url: otlpEndpoint })
+      const meterProvider = new MeterProvider()
+      const reader = new PeriodicExportingMetricReader({ exporter, exportIntervalMillis: 10_000 })
+      meterProvider.addMetricReader(reader)
+      // Attach meter provider globally
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const api = await import('@opentelemetry/api')
+      api.metrics.setGlobalMeterProvider(meterProvider)
+    }
+  } catch (err) {
+    // Non-fatal — don't block startup if metrics packages are missing
+    // eslint-disable-next-line no-console
+    console.warn('Failed to initialize metrics exporter:', err)
+  }
 }

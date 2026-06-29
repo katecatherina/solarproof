@@ -64,19 +64,62 @@ async function checkStellarRpc(): Promise<CheckResult> {
 
 /** GET /api/health — service health with DB + Stellar RPC checks */
 export async function GET() {
-  const [db, stellar] = await Promise.all([checkDatabase(), checkStellarRpc()])
+  const checks = await Promise.all([
+    checkDatabase(),
+    checkStellarRpc(),
+    checkRedisUpstash(),
+    checkRedisBull(),
+  ])
+
+  const [db, stellar, upstash, bull] = checks
 
   const overallStatus: CheckStatus =
-    db.status === 'error' || stellar.status === 'error'
+    [db, stellar, upstash, bull].some(c => c.status === 'error')
       ? 'error'
-      : db.status === 'degraded' || stellar.status === 'degraded'
+      : [db, stellar, upstash, bull].some(c => c.status === 'degraded')
       ? 'degraded'
       : 'ok'
 
   const httpStatus = overallStatus === 'error' ? 503 : 200
 
   return NextResponse.json(
-    { status: overallStatus, ts: Date.now(), checks: { database: db, stellar_rpc: stellar } },
+    {
+      status: overallStatus,
+      ts: Date.now(),
+      checks: { database: db, stellar_rpc: stellar, redis_upstash: upstash, redis_bull: bull },
+    },
     { status: httpStatus }
   )
+}
+
+export { checkDatabase, checkStellarRpc }
+
+async function checkRedisUpstash(): Promise<CheckResult> {
+  const start = Date.now()
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url) return { status: 'degraded', latency_ms: 0 }
+  try {
+    const res = await withTimeout(
+      fetch(`${url}/get/__health__`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }),
+      TIMEOUT_MS
+    )
+    const latency_ms = Date.now() - start
+    return { status: res.ok ? (latency_ms > DEGRADED_THRESHOLD_MS ? 'degraded' : 'ok') : 'error', latency_ms }
+  } catch (err) {
+    return { status: 'error', latency_ms: Date.now() - start, error: String(err) }
+  }
+}
+
+async function checkRedisBull(): Promise<CheckResult> {
+  const start = Date.now()
+  try {
+    const { getRedisConnection } = await import('@/lib/redis')
+    const conn = getRedisConnection()
+    const pong = await withTimeout(conn.ping(), TIMEOUT_MS)
+    const latency_ms = Date.now() - start
+    return { status: pong === 'PONG' ? (latency_ms > DEGRADED_THRESHOLD_MS ? 'degraded' : 'ok') : 'error', latency_ms }
+  } catch (err) {
+    return { status: 'error', latency_ms: Date.now() - start, error: String(err) }
+  }
 }

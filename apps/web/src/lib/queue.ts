@@ -13,6 +13,7 @@
 import { Queue, Worker, type Job } from 'bullmq'
 import { createServiceClient } from '@/lib/supabase'
 import { getRedisConnection } from '@/lib/redis'
+import { logger } from '@/lib/logger'
 
 export type JobType = 'anchor_and_mint'
 export type JobStatus = 'pending' | 'running' | 'done' | 'failed'
@@ -138,12 +139,39 @@ async function runAnchorAndMint(payload: AnchorAndMintPayload): Promise<Record<s
   const { readingId, readingHashHex, recipientAddress, kwh, correlationId } = payload
   const db = svc()
   const readingHash = Buffer.from(readingHashHex, 'hex')
+  // Re-read the reading record to handle duplicates / already-processed entries
+  const { data: existing } = await db.from('readings').select('anchored, anchor_tx_hash, minted, mint_tx_hash').eq('id', readingId).maybeSingle()
+  if (existing) {
+    if (existing.anchored && existing.minted) {
+      return { anchor_tx_hash: existing.anchor_tx_hash, mint_tx_hash: existing.mint_tx_hash }
+    }
+  }
 
-  const anchorTxHash = await anchorReading({ readingHash, correlationId })
-  await db.from('readings').update({ anchored: true, anchor_tx_hash: anchorTxHash }).eq('id', readingId)
+  const log = correlationId ? logger.withCorrelationId(correlationId) : logger
 
-  const mintTxHash = await mintCertificates(recipientAddress, kwh, correlationId)
-  await db.from('readings').update({ minted: true, mint_tx_hash: mintTxHash }).eq('id', readingId)
+  log.info('job.anchor.start', { reading_id: readingId, reading_hash: readingHashHex })
+  let anchorTxHash: string
+  try {
+    anchorTxHash = await anchorReading({ readingHash, correlationId })
+    await db.from('readings').update({ anchored: true, anchor_tx_hash: anchorTxHash }).eq('id', readingId)
+    log.info('job.anchor.success', { reading_id: readingId, anchor_tx_hash: anchorTxHash })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    log.error('job.anchor.failed', { reading_id: readingId, error: message })
+    throw err
+  }
+
+  log.info('job.mint.start', { reading_id: readingId, recipient: recipientAddress, kwh })
+  let mintTxHash: string
+  try {
+    mintTxHash = await mintCertificates(recipientAddress, kwh, correlationId)
+    await db.from('readings').update({ minted: true, mint_tx_hash: mintTxHash }).eq('id', readingId)
+    log.info('job.mint.success', { reading_id: readingId, mint_tx_hash: mintTxHash })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    log.error('job.mint.failed', { reading_id: readingId, error: message })
+    throw err
+  }
 
   // Fetch cooperative_id for certificate insert and webhooks
   const { data: reading } = await db
