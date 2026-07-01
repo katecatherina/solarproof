@@ -2,10 +2,10 @@
  * Tests for POST /api/readings
  *
  * Acceptance criteria:
- *  - Signature verified against meter's registered public key
- *  - 401 returned for invalid signatures
- *  - 400 returned for malformed payloads
- *  - Verified readings proceed to anchoring
+ *  - All required fields are validated with typed schema
+ *  - Invalid payloads return consistent 400 responses
+ *  - Signature and numeric fields are validated before processing
+ *  - Verified readings proceed to async anchor_and_mint job
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getPublicKey, sign } from '@noble/ed25519'
@@ -23,17 +23,38 @@ vi.mock('@/lib/cache', () => ({
   invalidateCert: vi.fn().mockResolvedValue(undefined),
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, retryAfter: 0 }),
 }))
+vi.mock('@/lib/queue', () => ({
+  enqueue: vi.fn().mockResolvedValue('job-id-test'),
+}))
+vi.mock('@/lib/rate-limit', () => ({
+  checkRateLimit: vi.fn().mockReturnValue({ allowed: true, resetAt: Date.now() + 60_000, remaining: 9 }),
+  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
+}))
+vi.mock('@/lib/idempotency', () => ({
+  getIdempotentResponse: vi.fn().mockResolvedValue(null),
+  storeIdempotentResponse: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(),
+  isAuthError: vi.fn().mockReturnValue(false),
+}))
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    withCorrelationId: vi.fn().mockReturnThis(),
+  },
+}))
 import { createServiceClient } from '@/lib/supabase'
 import { POST } from '@/app/api/readings/route'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Generate a fresh Ed25519 keypair and return hex strings. */
 async function makeKeypair() {
   const privKey = crypto.getRandomValues(new Uint8Array(32))
   const pubKey = await getPublicKey(privKey)
   return {
-    privKeyHex: Buffer.from(privKey).toString('hex'),
     pubKeyHex: Buffer.from(pubKey).toString('hex'),
     privKey,
   }
@@ -41,12 +62,10 @@ async function makeKeypair() {
 
 const METER_ID = '123e4567-e89b-12d3-a456-426614174000'
 const KWH = 12.5
-const TIMESTAMP = 1_700_000_000
 
-/** Build a valid signed reading body using the given private key. */
 async function makeBody(privKey: Uint8Array, overrides: Record<string, unknown> = {}) {
   const kwhStroops = kwhToStroops(KWH)
-  const currentTimestamp = overrides.timestamp as number ?? Math.floor(Date.now() / 1000)
+  const currentTimestamp = (overrides.timestamp as number) ?? Math.floor(Date.now() / 1000)
   const hash = computeReadingHash(METER_ID, kwhStroops, BigInt(currentTimestamp))
   const sig = await sign(hash, privKey)
   return {
@@ -59,7 +78,6 @@ async function makeBody(privKey: Uint8Array, overrides: Record<string, unknown> 
   }
 }
 
-/** Build a NextRequest-like object from a plain body. */
 function makeRequest(body: unknown, apiKey = 'mk_test_api_key') {
   return {
     json: () => Promise.resolve(body),
@@ -67,50 +85,30 @@ function makeRequest(body: unknown, apiKey = 'mk_test_api_key') {
   } as unknown as Parameters<typeof POST>[0]
 }
 
-/** Build a Supabase mock that returns the given meter row. */
 function mockDb(meter: unknown) {
-  const single = vi.fn().mockResolvedValue({ data: meter, error: null })
-  const eq = vi.fn().mockReturnValue({ single })
-  const select = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single }) }) })
-  const insertSingle = vi.fn().mockResolvedValue({
-    data: { id: 'reading-id-1', ...({} as object) },
-    error: null,
-  })
-  const updateEq = vi.fn().mockResolvedValue({ error: null })
-  const update = vi.fn().mockReturnValue({ eq: updateEq })
+  const meterSingle = vi.fn().mockResolvedValue({ data: meter, error: null })
+  const coopSingle = vi.fn().mockResolvedValue({ data: { admin_address: 'GADMIN' }, error: null })
+  const select = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: meterSingle }) }) })
+  const insertSingle = vi.fn().mockResolvedValue({ data: { id: 'reading-id-1' }, error: null })
   const insert = vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: insertSingle }) })
-  const certInsert = vi.fn().mockResolvedValue({ error: null })
 
   vi.mocked(createServiceClient).mockReturnValue({
     from: vi.fn((table: string) => {
       if (table === 'meters') return { select }
-      if (table === 'readings') return { insert, update }
-      if (table === 'certificates') return { insert: certInsert }
+      if (table === 'readings') return { insert }
+      if (table === 'cooperatives') {
+        return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: coopSingle }) }) }
+      }
       if (table === 'idempotency_keys') {
         return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({ data: null }),
-            }),
-          }),
-          delete: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({}),
-          }),
-        }
-      }
-      if (table === 'webhook_endpoints') {
-        const contains = vi.fn().mockResolvedValue({ data: [] })
-        const eq2 = vi.fn().mockReturnValue({ contains })
-        const eq1 = vi.fn().mockReturnValue({ eq: eq2 })
-        return {
-          select: vi.fn().mockReturnValue({ eq: eq1 }),
+          select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null }) }) }),
+          delete: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({}) }),
+          insert: vi.fn().mockResolvedValue({ error: null }),
         }
       }
       return {}
     }),
   } as unknown as ReturnType<typeof createServiceClient>)
-
-  return { select, insert, update }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -121,29 +119,56 @@ describe('POST /api/readings', () => {
   // ── 400 for malformed payloads ─────────────────────────────────────────────
 
   it('returns 400 when body is not JSON', async () => {
-    const req = { json: () => Promise.reject(new Error('bad json')), headers: { get: (_: string) => null } } as unknown as Parameters<typeof POST>[0]
-    const res = await POST(req)
-    expect(res.status).toBe(400)
+    const req = { json: () => Promise.reject(new Error('bad json')), headers: { get: () => null } } as unknown as Parameters<typeof POST>[0]
+    expect((await POST(req)).status).toBe(400)
   })
 
   it('returns 400 when meter_id is missing', async () => {
-    const res = await POST(makeRequest({ kwh: 1, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128) }))
-    expect(res.status).toBe(400)
+    expect((await POST(makeRequest({ kwh: 1, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
+  })
+
+  it('returns 400 when meter_id is not a UUID', async () => {
+    expect((await POST(makeRequest({ meter_id: 'not-a-uuid', kwh: KWH, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
   })
 
   it('returns 400 when kwh is negative', async () => {
-    const res = await POST(makeRequest({ meter_id: METER_ID, kwh: -1, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128) }))
-    expect(res.status).toBe(400)
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: -1, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
+  })
+
+  it('returns 400 when kwh is zero', async () => {
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: 0, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
+  })
+
+  it('returns 400 when kwh exceeds 1 000 000', async () => {
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: 2_000_000, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
+  })
+
+  it('returns 400 when kwh is a string', async () => {
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: '12.5', timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
   })
 
   it('returns 400 when signature_hex is wrong length', async () => {
-    const res = await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'deadbeef' }))
-    expect(res.status).toBe(400)
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'deadbeef', nonce: 'n' }))).status).toBe(400)
+  })
+
+  it('returns 400 when signature_hex contains non-hex characters', async () => {
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'z'.repeat(128), nonce: 'n' }))).status).toBe(400)
   })
 
   it('returns 400 when timestamp is missing', async () => {
-    const res = await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, signature_hex: 'a'.repeat(128) }))
-    expect(res.status).toBe(400)
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
+  })
+
+  it('returns 400 when timestamp looks like milliseconds (too large)', async () => {
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, timestamp: Date.now(), signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
+  })
+
+  it('returns 400 when timestamp is a float', async () => {
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, timestamp: 1_700_000_000.5, signature_hex: 'a'.repeat(128), nonce: 'n' }))).status).toBe(400)
+  })
+
+  it('returns 400 when nonce is missing', async () => {
+    expect((await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, timestamp: Math.floor(Date.now() / 1000), signature_hex: 'a'.repeat(128) }))).status).toBe(400)
   })
 
   // ── 404 for unknown meter ──────────────────────────────────────────────────
@@ -151,78 +176,68 @@ describe('POST /api/readings', () => {
   it('returns 404 when meter is not found', async () => {
     mockDb(null)
     const { privKey } = await makeKeypair()
-    const res = await POST(makeRequest(await makeBody(privKey)))
-    expect(res.status).toBe(404)
+    expect((await POST(makeRequest(await makeBody(privKey)))).status).toBe(404)
   })
 
   // ── 401 for invalid signature ──────────────────────────────────────────────
 
   it('returns 401 when signature is signed by a different key', async () => {
     const { pubKeyHex } = await makeKeypair()
-    const { privKey: wrongPrivKey } = await makeKeypair()
-    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key', cooperatives: { admin_address: 'GADMIN' } })
-    const body = await makeBody(wrongPrivKey) // signed with wrong key
-    const res = await POST(makeRequest(body))
+    const { privKey: wrongKey } = await makeKeypair()
+    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key' })
+    const res = await POST(makeRequest(await makeBody(wrongKey)))
     expect(res.status).toBe(401)
-    const json = await res.json()
-    expect(json.error).toMatch(/invalid meter signature/i)
+    expect((await res.json()).error).toMatch(/invalid meter signature/i)
   })
 
-  it('returns 401 when signature_hex is all zeros (invalid)', async () => {
+  it('returns 401 when signature_hex is all zeros', async () => {
     const { pubKeyHex } = await makeKeypair()
-    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key', cooperatives: { admin_address: 'GADMIN' } })
-    const body = { meter_id: METER_ID, kwh: KWH, timestamp: Math.floor(Date.now() / 1000), signature_hex: '0'.repeat(128), nonce: 'test_nonce_123' }
-    const res = await POST(makeRequest(body))
+    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key' })
+    const res = await POST(makeRequest({ meter_id: METER_ID, kwh: KWH, timestamp: Math.floor(Date.now() / 1000), signature_hex: '0'.repeat(128), nonce: 'n' }))
     expect(res.status).toBe(401)
   })
 
-  // ── Valid signature proceeds to anchoring ──────────────────────────────────
+  // ── Valid signature enqueues job ───────────────────────────────────────────
 
-  it('returns 201 and anchors when signature is valid', async () => {
+  it('returns 202 and enqueues job when signature is valid', async () => {
     const { privKey, pubKeyHex } = await makeKeypair()
-    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key', cooperatives: { admin_address: 'GADMIN' } })
-    const body = await makeBody(privKey)
-    const res = await POST(makeRequest(body))
-    expect(res.status).toBe(201)
+    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key' })
+    const res = await POST(makeRequest(await makeBody(privKey)))
+    expect(res.status).toBe(202)
     const json = await res.json()
-    expect(json.anchor_tx_hash).toBe('anchor_tx_abc')
-    expect(json.mint_tx_hash).toBe('mint_tx_abc')
     expect(json.reading_id).toBeDefined()
+    expect(json.job_id).toBeDefined()
   })
 
-  it('calls anchorReading with the correct hash for a valid reading', async () => {
+  it('enqueues anchor_and_mint job with correct reading hash', async () => {
     const { privKey, pubKeyHex } = await makeKeypair()
-    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key', cooperatives: { admin_address: 'GADMIN' } })
+    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key' })
     const body = await makeBody(privKey)
-
-    const { anchorReading } = await import('@/lib/stellar')
+    const { enqueue } = await import('@/lib/queue')
     await POST(makeRequest(body))
-
-    expect(anchorReading).toHaveBeenCalledOnce()
-    const callArg = vi.mocked(anchorReading).mock.calls[0][0]
-    const expectedHash = computeReadingHash(METER_ID, kwhToStroops(KWH), BigInt(body.timestamp))
-    expect(Buffer.from(callArg.readingHash).toString('hex')).toBe(expectedHash.toString('hex'))
+    expect(enqueue).toHaveBeenCalledOnce()
+    const [jobName, payload] = vi.mocked(enqueue).mock.calls[0]
+    expect(jobName).toBe('anchor_and_mint')
+    expect(payload.readingHashHex).toBe(
+      computeReadingHash(METER_ID, kwhToStroops(KWH), BigInt(body.timestamp)).toString('hex')
+    )
   })
 
   // ── API key validation ─────────────────────────────────────────────────────
 
   it('returns 401 when x-api-key header is missing', async () => {
     const { privKey, pubKeyHex } = await makeKeypair()
-    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key', cooperatives: { admin_address: 'GADMIN' } })
-    const body = await makeBody(privKey)
-    const res = await POST(makeRequest(body, null as unknown as string))
+    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key' })
+    const res = await POST(makeRequest(await makeBody(privKey), null as unknown as string))
     expect(res.status).toBe(401)
-    const json = await res.json()
-    expect(json.error).toMatch(/api key/i)
+    expect((await res.json()).error).toMatch(/api key/i)
   })
 
   it('returns 401 when x-api-key is wrong', async () => {
     const { privKey, pubKeyHex } = await makeKeypair()
-    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key', cooperatives: { admin_address: 'GADMIN' } })
-    const body = await makeBody(privKey)
-    const res = await POST(makeRequest(body, 'mk_wrong_key'))
+    mockDb({ id: METER_ID, pubkey_hex: pubKeyHex, cooperative_id: 'coop-1', api_key: 'mk_test_api_key' })
+    const res = await POST(makeRequest(await makeBody(privKey), 'mk_wrong_key'))
     expect(res.status).toBe(401)
-    const json = await res.json()
-    expect(json.error).toMatch(/api key/i)
+    expect((await res.json()).error).toMatch(/api key/i)
   })
 })

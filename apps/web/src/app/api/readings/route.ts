@@ -71,11 +71,22 @@ export async function GET(req: NextRequest) {
 }
 
 const ReadingSchema = z.object({
-  meter_id: z.string().uuid(),
-  kwh: z.number().positive(),
-  timestamp: z.number().int().positive(), // Unix seconds
-  signature_hex: z.string().trim().length(128),  // 64-byte Ed25519 sig as hex
-  nonce: z.string().trim().min(1).max(128),      // Required for replay protection
+  meter_id: z.string().uuid({ message: 'meter_id must be a valid UUID' }),
+  kwh: z
+    .number({ invalid_type_error: 'kwh must be a number' })
+    .positive({ message: 'kwh must be positive' })
+    .max(1_000_000, { message: 'kwh value is unrealistically large' }),
+  timestamp: z
+    .number({ invalid_type_error: 'timestamp must be a number' })
+    .int({ message: 'timestamp must be an integer' })
+    .positive({ message: 'timestamp must be a positive Unix epoch (seconds)' })
+    .max(9_999_999_999, { message: 'timestamp must be Unix epoch in seconds, not milliseconds' }),
+  signature_hex: z
+    .string()
+    .trim()
+    .length(128, { message: 'signature_hex must be exactly 128 hex characters (64-byte Ed25519 signature)' })
+    .regex(/^[0-9a-fA-F]{128}$/, { message: 'signature_hex must contain only hexadecimal characters' }),
+  nonce: z.string().trim().min(1).max(128),
 })
 
 /**
