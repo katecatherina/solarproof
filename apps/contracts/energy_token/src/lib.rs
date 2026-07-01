@@ -1222,3 +1222,6 @@ mod tests {
 
 #[cfg(test)]
 mod overflow_tests;
+
+#[cfg(test)]
+mod storage_cost_tests;
