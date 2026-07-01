@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Search, CheckCircle, XCircle, Shield, ExternalLink, Copy } from 'lucide-react'
 import { SectionSkeleton } from '@/components/skeleton'
 import { CopyableText } from '@/components/copy-button'
+import { writeToClipboard } from '@/components/copy-button'
 import { useToast } from '@/components/ToastProvider'
 
 interface ChainOfCustody {
@@ -106,7 +107,7 @@ export default function VerifyPage() {
   const [pageError, setPageError] = useState<Error | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
-  const { pushToast: toast } = useToast()
+  const { pushToast } = useToast()
 
   function handleVerify(e: React.FormEvent) {
     e.preventDefault()
@@ -122,12 +123,12 @@ export default function VerifyPage() {
       if (!res.ok) {
         const message = data.error || 'Unable to verify certificate'
         setError(message)
-        toast({ variant: 'error', title: 'Verification failed', description: message })
+        pushToast({ variant: 'error', title: 'Verification failed', description: message })
         return
       }
 
       setResult(data)
-      toast({ variant: 'success', title: 'Certificate verified', description: 'Full chain of custody confirmed.' })
+      pushToast({ variant: 'success', title: 'Certificate verified', description: 'Full chain of custody confirmed.' })
     } catch {
       setError('Network error — please try again.')
       trackEvent('verify_error', { status: 0 })
@@ -138,9 +139,14 @@ export default function VerifyPage() {
   }
 
   async function copyLink() {
-    await navigator.clipboard.writeText(window.location.href)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await writeToClipboard(window.location.href)
+      setCopied(true)
+      pushToast({ variant: 'success', title: 'Link copied', description: 'Paste it anywhere to share this verification.' })
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      pushToast({ variant: 'error', title: 'Copy failed', description: 'Please copy the URL from your browser address bar.' })
+    }
   }
 
   const steps = result ? buildSteps(result) : null
@@ -237,11 +243,12 @@ export default function VerifyPage() {
             <button
               onClick={copyLink}
               aria-label="Copy shareable verification link"
+              aria-pressed={copied}
               title="Copy shareable link"
               className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-white/60 dark:hover:bg-gray-800/60"
             >
               <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-              {copied ? 'Copied!' : 'Share'}
+              <span aria-live="polite">{copied ? 'Copied!' : 'Share'}</span>
             </button>
           </div>
 
