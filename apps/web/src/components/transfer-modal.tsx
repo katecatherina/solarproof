@@ -11,9 +11,22 @@ interface Props {
   onClose: () => void
 }
 
+/** Basic Stellar address validation: starts with G and is 56 chars. */
+function validateAddress(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return 'Recipient address is required.'
+  if (!trimmed.startsWith('G') || trimmed.length !== 56) {
+    return 'Enter a valid Stellar account address (starts with G, 56 characters).'
+  }
+  return null
+}
+
 export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props) {
   const [toAddress, setToAddress] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [fieldError, setFieldError] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [touched, setTouched] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<Element | null>(null)
 
@@ -29,11 +42,11 @@ export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props)
   // Escape key closes the modal
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && !submitting) onClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [onClose, submitting])
 
   // Focus trap: keep Tab inside the dialog
   function handleTabKey(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -45,32 +58,47 @@ export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props)
     const first = focusable[0]
     const last = focusable[focusable.length - 1]
     if (e.shiftKey) {
-      if (document.activeElement === first) {
-        e.preventDefault()
-        last.focus()
-      }
+      if (document.activeElement === first) { e.preventDefault(); last.focus() }
     } else {
-      if (document.activeElement === last) {
-        e.preventDefault()
-        first.focus()
-      }
+      if (document.activeElement === last) { e.preventDefault(); first.focus() }
     }
+  }
+
+  function handleAddressChange(value: string) {
+    setToAddress(value)
+    if (touched) {
+      setFieldError(validateAddress(value))
+    }
+  }
+
+  function handleBlur() {
+    setTouched(true)
+    setFieldError(validateAddress(toAddress))
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setTouched(true)
+    const error = validateAddress(toAddress)
+    setFieldError(error)
+    if (error) return
     setSubmitting(true)
+    setSubmitError(null)
     try {
       await onConfirm(toAddress.trim())
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Transfer failed. Please try again.')
     } finally {
       setSubmitting(false)
     }
   }
 
+  const hasFieldError = touched && !!fieldError
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.target === e.currentTarget && !submitting && onClose()}
     >
       <div
         ref={dialogRef}
@@ -90,8 +118,9 @@ export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props)
           </div>
           <button
             onClick={onClose}
+            disabled={submitting}
             aria-label="Close transfer certificate dialog"
-            className="rounded p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            className="rounded p-1 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed dark:hover:text-gray-200"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -103,23 +132,62 @@ export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props)
           {' '}({kwh} kWh) to another Stellar account.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {submitError && (
+          <div
+            role="alert"
+            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+          >
+            {submitError}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label
               htmlFor="transfer-to"
               className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
               Recipient Stellar address
+              <span className="ml-1 text-red-500" aria-hidden="true">*</span>
             </label>
             <input
               id="transfer-to"
               type="text"
               value={toAddress}
-              onChange={(e) => setToAddress(e.target.value)}
-              required
+              onChange={(e) => handleAddressChange(e.target.value)}
+              onBlur={handleBlur}
+              disabled={submitting}
+              aria-required="true"
+              aria-invalid={hasFieldError || undefined}
+              aria-describedby={hasFieldError ? 'transfer-to-err' : 'transfer-to-hint'}
               placeholder="G…"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+              autoComplete="off"
+              className={`w-full rounded-lg border bg-white px-3 py-2 font-mono text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500 ${
+                hasFieldError
+                  ? 'border-red-400 focus:border-red-400 focus:ring-red-400 dark:border-red-500'
+                  : 'border-gray-300 focus:border-blue-400 focus:ring-blue-400 dark:border-gray-700'
+              }`}
             />
+            <p id="transfer-to-hint" className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              Stellar account address — starts with G, 56 characters
+            </p>
+            {hasFieldError && (
+              <p
+                id="transfer-to-err"
+                role="alert"
+                aria-live="polite"
+                className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"
+              >
+                <svg className="h-3 w-3 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                {fieldError}
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end gap-3">
@@ -133,7 +201,8 @@ export function TransferModal({ certificateId, kwh, onConfirm, onClose }: Props)
             </button>
             <button
               type="submit"
-              disabled={submitting || !toAddress.trim()}
+              disabled={submitting || (touched && !!fieldError)}
+              aria-busy={submitting}
               className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting && (
