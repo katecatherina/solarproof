@@ -22,51 +22,38 @@
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
+import { env } from '@/env'
 
-// ---------------------------------------------------------------------------
-// Validate required environment variables at module load time so misconfigured
-// deployments fail fast with a clear message rather than a cryptic runtime
-// error deep inside a fetch call.
-// ---------------------------------------------------------------------------
-function requireEnv(key: string): string {
-  const value = process.env[key]
-  if (!value) {
-    throw new Error(
-      `[supabase] Missing required environment variable: ${key}. ` +
-        'Check your .env.local file or deployment environment.'
-    )
-  }
-  return value
-}
-
-const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
-const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
-
-// ---------------------------------------------------------------------------
-// Browser / anon client (singleton)
-// Reuse the same instance across the app to avoid creating multiple
-// GoTrue auth instances, which can cause session-sync issues.
-// ---------------------------------------------------------------------------
-export const supabase: SupabaseClient<Database> = createClient<Database>(
-  supabaseUrl,
-  supabaseAnonKey
+export const supabase = createClient<Database>(
+  env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost',
+  env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
 )
 
-// ---------------------------------------------------------------------------
-// Server-only service-role client factory
-// Returns a new client instance each time so it is safe to call in
-// concurrent server requests without shared mutable state.
-// Do NOT cache or export this instance — callers get a fresh client each time
-// to prevent accidental cross-request data leaks.
-// ---------------------------------------------------------------------------
-export function createServiceClient(): SupabaseClient<Database> {
-  const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY')
-  return createClient<Database>(supabaseUrl, serviceRoleKey, {
-    auth: {
-      // Never persist a session for the service-role client; it is used
-      // purely for server-side operations with full database access.
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  })
+/**
+ * Anon client — uses the public anon key; RLS is enforced.
+ * Use for public read-only endpoints (e.g. /api/verify) that require no auth.
+ */
+export function createAnonClient() {
+  return createClient<Database>(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false } }
+  )
+}
+
+/**
+ * Service-role client — bypasses RLS. Use ONLY in trusted server contexts:
+ *   - Writing readings, certificates, jobs (device-submitted, already verified)
+ *   - Audit log writes (must never be gated by operator RLS)
+ *   - Background job processing (no user JWT available)
+ *   - Webhook fan-out (cross-cooperative queries)
+ *   - Health checks (needs cross-tenant visibility)
+ * See docs/adr/007-supabase-service-role-usage.md for the full justification.
+ */
+export function createServiceClient() {
+  return createClient<Database>(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } }
+  )
 }
