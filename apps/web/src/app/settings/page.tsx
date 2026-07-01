@@ -3,10 +3,14 @@
 import { useTheme } from 'next-themes'
 import { useQuery } from '@tanstack/react-query'
 import { Moon, Sun, Building2, User } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 export default function SettingsPage() {
-  const { resolvedTheme, setTheme, systemTheme } = useTheme()
-  const theme = resolvedTheme === 'system' ? systemTheme : resolvedTheme
+  const { resolvedTheme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
+  const isDark = mounted && resolvedTheme === 'dark'
 
   const { data: coop, isLoading } = useQuery({
     queryKey: ['my-cooperative'],
@@ -18,7 +22,7 @@ export default function SettingsPage() {
   })
 
   function toggleTheme() {
-    setTheme(theme === 'dark' ? 'light' : 'dark')
+    setTheme(isDark ? 'light' : 'dark')
   }
 
   return (
@@ -69,10 +73,12 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={toggleTheme}
+              aria-pressed={isDark}
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-900 transition hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
             >
-              {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
-              {theme === 'dark' ? 'Light' : 'Dark'}
+              {isDark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+              {isDark ? 'Light mode' : 'Dark mode'}
             </button>
           </div>
         </section>
