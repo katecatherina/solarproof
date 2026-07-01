@@ -3,6 +3,7 @@
 > End-to-end cryptographic proof of renewable energy — from physical meter to on-chain certificate.
 
 [![CI](https://github.com/AnnabelJoe/solarproof/actions/workflows/ci.yml/badge.svg)](https://github.com/AnnabelJoe/solarproof/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/AnnabelJoe/solarproof/branch/main/graph/badge.svg)](https://codecov.io/gh/AnnabelJoe/solarproof)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
 [![Stellar](https://img.shields.io/badge/Stellar-Soroban-blue?logo=stellar)](https://stellar.org)
 [![Tests](https://img.shields.io/badge/Tests-passing-brightgreen)](#)
@@ -76,6 +77,8 @@ Built with **Soroban SDK 23.1.0** and **OpenZeppelin Stellar v0.5.1**.
 
 ## Quick Start
 
+> **New to the project?** See the [Developer Onboarding Guide](docs/ONBOARDING.md) for a step-by-step walkthrough from prerequisites to a live meter reading simulation.
+
 ### Prerequisites
 
 - Node.js v22+
@@ -104,6 +107,51 @@ cd apps/contracts
 stellar contract build
 cargo test
 ```
+
+### Docker (recommended for local development)
+
+Spin up the full stack — Next.js, Supabase, and Redis — with a single command:
+
+```bash
+cp apps/web/.env.example .env.local   # fill in your values
+docker compose up
+```
+
+The web app will be available at http://localhost:3000.
+
+All three services include health checks:
+
+| Service | Health check | Endpoint / command |
+|---|---|---|
+| `web` | HTTP poll | `GET /api/health` every 30s |
+| `supabase-db` | pg_isready | `pg_isready -U postgres` every 10s |
+| `redis` | CLI ping | `redis-cli ping` every 10s |
+
+The `web` service waits for both `supabase-db` and `redis` to be healthy before starting (`depends_on: condition: service_healthy`).
+
+Data is persisted in named Docker volumes (`supabase_data`, `redis_data`) so it survives container restarts.
+
+To stop and remove containers (volumes are kept):
+
+```bash
+docker compose down
+```
+
+**Minimum host requirements for Docker Compose:**
+
+| Resource | Minimum |
+|---|---|
+| RAM | 2 GB available to Docker |
+| CPU | 2 cores |
+| Disk | 4 GB free |
+
+Resource limits per service (defined in `docker-compose.yml`):
+
+| Service | Memory limit | CPU limit |
+|---|---|---|
+| `web` | 1 GB | 1.0 core |
+| `supabase-db` | 512 MB | 0.5 core |
+| `redis` | 128 MB | 0.25 core |
 
 ### Simulate a meter reading
 
@@ -158,14 +206,16 @@ solarproof/
 | Level | What | Status |
 |---|---|---|
 | 1 | Signed meter readings + on-chain anchoring | ✅ Current |
-| 2 | Hardware HSM integration (YubiKey / TPM) | 🔜 Next |
-| 3 | I-REC / Energy Web / TIGR bridge | 🔮 Future |
+| 2 | Hardware HSM integration (YubiKey / TPM) | ✅ Completed |
+| 3 | I-REC / Energy Web / TIGR bridge (#609) | 🔮 Future |
 
 ---
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). PRs target `develop`.
+
+See [CHANGELOG.md](CHANGELOG.md) for a history of notable changes.
 
 ---
 
