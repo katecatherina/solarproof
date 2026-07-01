@@ -78,6 +78,12 @@
   "walletGate": {
     "title": "Wallet required",
     "description": "Connect your Freighter wallet to access this page.",
-    "connect": "Connect wallet"
+    "connect": "Connect wallet",
+    "reconnect": "Reconnect wallet",
+    "connecting": "Connecting…",
+    "connectError": "Could not connect to wallet. Please try again.",
+    "disconnectedTitle": "Wallet disconnected",
+    "disconnectedDescription": "Your wallet session has ended. Reconnect to continue using wallet-dependent features.",
+    "disconnectedHint": "Make sure your Freighter extension is unlocked and the correct account is selected."
   }
 }

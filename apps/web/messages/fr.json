@@ -73,5 +73,16 @@
         "daysInvalid": "Entrez un nombre entre 1 et 30."
       }
     }
+  },
+  "walletGate": {
+    "title": "Portefeuille requis",
+    "description": "Connectez votre portefeuille Freighter pour accéder à cette page.",
+    "connect": "Connecter le portefeuille",
+    "reconnect": "Reconnecter le portefeuille",
+    "connecting": "Connexion…",
+    "connectError": "Impossible de se connecter au portefeuille. Veuillez réessayer.",
+    "disconnectedTitle": "Portefeuille déconnecté",
+    "disconnectedDescription": "Votre session de portefeuille a expiré. Reconnectez-vous pour continuer.",
+    "disconnectedHint": "Assurez-vous que votre extension Freighter est déverrouillée et que le bon compte est sélectionné."
   }
 }
