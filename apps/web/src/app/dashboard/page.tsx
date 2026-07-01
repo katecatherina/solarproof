@@ -18,8 +18,9 @@ import { useTheme } from 'next-themes'
 import { Zap, Award, Leaf, TrendingUp, Download } from 'lucide-react'
 import { AccessibleLegend } from '@/components/accessible-chart-legend'
 import { StatCardSkeleton, ChartSkeleton, TableRowSkeleton } from '@/components/skeleton'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, memo } from 'react'
 import { useRealtimeReadings } from '@/hooks/use-realtime-readings'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,7 +131,7 @@ interface StatCardProps {
   description?: string
 }
 
-function StatCard({ label, value, icon: Icon, description }: StatCardProps) {
+const StatCard = memo(function StatCard({ label, value, icon: Icon, description }: StatCardProps) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
       <div className="mb-2 flex items-center justify-between">
@@ -143,7 +144,7 @@ function StatCard({ label, value, icon: Icon, description }: StatCardProps) {
       )}
     </div>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // Accessible chart colours
@@ -214,7 +215,7 @@ export default function DashboardPage() {
     isLoading: analyticsLoading,
     error: analyticsError,
   } = useQuery({ 
-    queryKey: ['analytics', dateParams], 
+    queryKey: ['analytics', dateParams.date_from, dateParams.date_to, dateParams.granularity],
     queryFn: () => fetchAnalytics(dateParams) 
   })
 
@@ -309,6 +310,7 @@ export default function DashboardPage() {
       {/* Main Charts */}
       <section className="mb-8 grid gap-6 lg:grid-cols-2">
         {/* Generation Trend */}
+        <ErrorBoundary inline>
         <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
           <figure aria-labelledby="generation-trend-title" aria-describedby="generation-trend-desc">
             <div className="mb-6 flex items-center justify-between">
@@ -352,8 +354,10 @@ export default function DashboardPage() {
             </div>
           </figure>
         </div>
+        </ErrorBoundary>
 
         {/* Issuance vs Retirement */}
+        <ErrorBoundary inline>
         <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
           <figure aria-labelledby="certs-activity-title" aria-describedby="certs-activity-desc">
             <div className="mb-6 flex items-center justify-between">
@@ -413,6 +417,7 @@ export default function DashboardPage() {
             </div>
           </figure>
         </div>
+        </ErrorBoundary>
       </section>
 
       {/* Per-Meter Breakdown */}
