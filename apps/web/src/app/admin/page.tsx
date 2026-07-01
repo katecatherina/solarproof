@@ -291,3 +291,5 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: string; 
     </div>
   )
 }
+
+// #485 .
