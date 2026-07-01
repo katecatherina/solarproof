@@ -2,7 +2,7 @@
 //!
 //! SEP-41 fungible certificate token representing verified renewable energy.
 //! **1000 token units = 1 kWh** (decimals = 3; 1 unit = 0.001 kWh).
-//! Generation is cryptographically anchored on-chain via the `audit_registry` contract.
+//! Generation is cryptographically anchored on-chain via the `audit_registry` contract..
 //!
 //! ## Roles
 //! | Role | Description |
