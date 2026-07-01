@@ -10,6 +10,7 @@ import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/idempotenc
 import { logger } from '@/lib/logger'
 import { requireAuth, isAuthError } from '@/lib/auth'
 import { enqueue } from '@/lib/queue'
+import { AppError, ErrorCategory, errorBody } from '@/lib/errors'
 
 const NONCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
@@ -226,12 +227,13 @@ export async function POST(req: NextRequest) {
         .single()
 
       return NextResponse.json(
-        { error: 'Reading already anchored', reading_id: existing?.id },
+        { error: 'Reading already anchored', reading_id: existing?.id, code: ErrorCategory.DB_CONSTRAINT, retriable: false },
         { status: 409 }
       )
     }
-    log.error('readings.post.db_insert_failed', { meter_id, error: readingErr?.message })
-    return NextResponse.json({ error: 'Failed to save reading' }, { status: 500 })
+    const appErr = new AppError(ErrorCategory.DB_QUERY, 'Failed to save reading', { meter_id, dbError: readingErr?.message })
+    log.error('readings.post.db_insert_failed', { ...appErr.meta })
+    return NextResponse.json(errorBody(appErr), { status: appErr.httpStatus })
   }
 
   const { data: coop } = await db

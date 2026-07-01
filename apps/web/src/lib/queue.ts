@@ -14,6 +14,7 @@ import { Queue, Worker, type Job } from 'bullmq'
 import { createServiceClient } from '@/lib/supabase'
 import { getRedisConnection } from '@/lib/redis'
 import { logger } from '@/lib/logger'
+import { AppError } from '@/lib/errors'
 
 export type JobType = 'anchor_and_mint'
 export type JobStatus = 'pending' | 'running' | 'done' | 'failed'
@@ -111,7 +112,9 @@ async function processJob(job: Job): Promise<void> {
     await db.from('jobs').update({ status: 'done', result: result as import('@/lib/database.types').Json }).eq('id', dbJobId)
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
+    const category = err instanceof AppError ? err.category : 'INTERNAL'
     const isFinal = job.attemptsMade + 1 >= (job.opts.attempts ?? 3)
+    logger.error('job.failed', { dbJobId, category, error: errorMsg, attempt: job.attemptsMade + 1, final: isFinal })
     await db
       .from('jobs')
       .update({ status: isFinal ? 'failed' : 'pending', error: errorMsg })
@@ -157,7 +160,8 @@ async function runAnchorAndMint(payload: AnchorAndMintPayload): Promise<Record<s
     log.info('job.anchor.success', { reading_id: readingId, anchor_tx_hash: anchorTxHash })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    log.error('job.anchor.failed', { reading_id: readingId, error: message })
+    const category = err instanceof AppError ? err.category : 'INTERNAL'
+    log.error('job.anchor.failed', { reading_id: readingId, category, error: message })
     throw err
   }
 
@@ -169,7 +173,8 @@ async function runAnchorAndMint(payload: AnchorAndMintPayload): Promise<Record<s
     log.info('job.mint.success', { reading_id: readingId, mint_tx_hash: mintTxHash })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    log.error('job.mint.failed', { reading_id: readingId, error: message })
+    const category = err instanceof AppError ? err.category : 'INTERNAL'
+    log.error('job.mint.failed', { reading_id: readingId, category, error: message })
     throw err
   }
 
