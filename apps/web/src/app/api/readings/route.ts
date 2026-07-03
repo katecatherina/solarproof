@@ -10,6 +10,7 @@ import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/idempotenc
 import { logger } from '@/lib/logger'
 import { requireAuth, isAuthError } from '@/lib/auth'
 import { enqueue } from '@/lib/queue'
+import { AppError, ErrorCategory, errorBody } from '@/lib/errors'
 
 const NONCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
@@ -69,12 +70,31 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ data: page, next_cursor, total: count ?? 0 })
 }
 
+const MetadataSchema = z.object({
+  firmware_version: z.string().optional(),
+  hardware_model: z.string().optional(),
+  location_lat: z.number().optional(),
+  location_lon: z.number().optional(),
+  manufacturer: z.string().optional(),
+})
+
 const ReadingSchema = z.object({
-  meter_id: z.string().uuid(),
-  kwh: z.number().positive(),
-  timestamp: z.number().int().positive(), // Unix seconds
-  signature_hex: z.string().trim().length(128),  // 64-byte Ed25519 sig as hex
-  nonce: z.string().trim().min(1).max(128),      // Required for replay protection
+  meter_id: z.string().uuid({ message: 'meter_id must be a valid UUID' }),
+  kwh: z
+    .number({ invalid_type_error: 'kwh must be a number' })
+    .positive({ message: 'kwh must be positive' })
+    .max(1_000_000, { message: 'kwh value is unrealistically large' }),
+  timestamp: z
+    .number({ invalid_type_error: 'timestamp must be a number' })
+    .int({ message: 'timestamp must be an integer' })
+    .positive({ message: 'timestamp must be a positive Unix epoch (seconds)' })
+    .max(9_999_999_999, { message: 'timestamp must be Unix epoch in seconds, not milliseconds' }),
+  signature_hex: z
+    .string()
+    .trim()
+    .length(128, { message: 'signature_hex must be exactly 128 hex characters (64-byte Ed25519 signature)' })
+    .regex(/^[0-9a-fA-F]{128}$/, { message: 'signature_hex must contain only hexadecimal characters' }),
+  nonce: z.string().trim().min(1).max(128),
 })
 
 /**
@@ -213,6 +233,9 @@ export async function POST(req: NextRequest) {
       signature_hex,
       anchored: false,
       minted: false,
+      metadata: metadata ?? null,
+      metadata_hash: metadataHash ? metadataHash.toString('hex') : null,
+      metadata_signature_hex: metadata_signature_hex ?? null,
     })
     .select()
     .single()
@@ -226,12 +249,13 @@ export async function POST(req: NextRequest) {
         .single()
 
       return NextResponse.json(
-        { error: 'Reading already anchored', reading_id: existing?.id },
+        { error: 'Reading already anchored', reading_id: existing?.id, code: ErrorCategory.DB_CONSTRAINT, retriable: false },
         { status: 409 }
       )
     }
-    log.error('readings.post.db_insert_failed', { meter_id, error: readingErr?.message })
-    return NextResponse.json({ error: 'Failed to save reading' }, { status: 500 })
+    const appErr = new AppError(ErrorCategory.DB_QUERY, 'Failed to save reading', { meter_id, dbError: readingErr?.message })
+    log.error('readings.post.db_insert_failed', { ...appErr.meta })
+    return NextResponse.json(errorBody(appErr), { status: appErr.httpStatus })
   }
 
   const { data: coop } = await db

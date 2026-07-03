@@ -73,5 +73,16 @@
         "daysInvalid": "Geben Sie eine Zahl zwischen 1 und 30 ein."
       }
     }
+  },
+  "walletGate": {
+    "title": "Wallet erforderlich",
+    "description": "Verbinden Sie Ihre Freighter-Wallet, um auf diese Seite zuzugreifen.",
+    "connect": "Wallet verbinden",
+    "reconnect": "Wallet erneut verbinden",
+    "connecting": "Verbinden…",
+    "connectError": "Verbindung zur Wallet nicht möglich. Bitte erneut versuchen.",
+    "disconnectedTitle": "Wallet getrennt",
+    "disconnectedDescription": "Ihre Wallet-Sitzung ist abgelaufen. Verbinden Sie sich erneut, um fortzufahren.",
+    "disconnectedHint": "Stellen Sie sicher, dass Ihre Freighter-Erweiterung entsperrt ist und das richtige Konto ausgewählt ist."
   }
 }

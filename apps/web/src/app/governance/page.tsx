@@ -1,9 +1,11 @@
 'use client'
+// .
 
 import { useState } from 'react'
 import { Vote, Plus, Clock, CheckCircle, XCircle, Minus, ChevronDown, ChevronUp } from 'lucide-react'
 import { useWallet } from '@/hooks/useWallet'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ProposalListSkeleton } from '@/components/skeleton'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -91,16 +93,32 @@ function TallyBar({ tally }: { tally: Tally }) {
   const abstainPct = pct(tally.abstain, total)
   return (
     <div className="space-y-1.5">
-      <div className="flex h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800" aria-label={`Tally: ${forPct}% for, ${againstPct}% against, ${abstainPct}% abstain`} role="img">
-        <div className="bg-green-500" style={{ width: `${forPct}%` }} />
-        <div className="bg-red-500" style={{ width: `${againstPct}%` }} />
-        <div className="bg-gray-400 dark:bg-gray-600" style={{ width: `${abstainPct}%` }} />
+      <div
+        className="flex h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
+        aria-label={`Tally: ${forPct}% for, ${againstPct}% against, ${abstainPct}% abstain`}
+        role="img"
+      >
+        <div className="bg-green-500" style={{ width: `${forPct}%` }} aria-hidden="true" />
+        <div className="bg-red-500" style={{ width: `${againstPct}%` }} aria-hidden="true" />
+        <div className="bg-gray-400 dark:bg-gray-600" style={{ width: `${abstainPct}%` }} aria-hidden="true" />
       </div>
-      <div className="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
-        <span><span className="font-medium text-green-600 dark:text-green-400">{forPct}%</span> For ({tally.for})</span>
-        <span><span className="font-medium text-red-600 dark:text-red-400">{againstPct}%</span> Against ({tally.against})</span>
-        <span><span className="font-medium text-gray-500">{abstainPct}%</span> Abstain ({tally.abstain})</span>
-      </div>
+      <ul className="flex gap-4 text-xs text-gray-500 dark:text-gray-400" aria-label="Vote tally legend">
+        <li>
+          <span aria-label={`For votes: ${forPct} percent, ${tally.for} votes`}>
+            <span className="font-medium text-green-600 dark:text-green-400">{forPct}%</span> For ({tally.for})
+          </span>
+        </li>
+        <li>
+          <span aria-label={`Against votes: ${againstPct} percent, ${tally.against} votes`}>
+            <span className="font-medium text-red-600 dark:text-red-400">{againstPct}%</span> Against ({tally.against})
+          </span>
+        </li>
+        <li>
+          <span aria-label={`Abstain votes: ${abstainPct} percent, ${tally.abstain} votes`}>
+            <span className="font-medium text-gray-500">{abstainPct}%</span> Abstain ({tally.abstain})
+          </span>
+        </li>
+      </ul>
     </div>
   )
 }
@@ -232,6 +250,7 @@ function CreateProposalForm({ onCreated }: { onCreated: () => void }) {
   const [errors, setErrors] = useState<Partial<FormState>>({})
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const mutation = useMutation({
     mutationFn: (data: typeof form) => createProposal({
@@ -244,10 +263,11 @@ function CreateProposalForm({ onCreated }: { onCreated: () => void }) {
       onCreated()
       setForm(EMPTY)
       setErrors({})
+      setSubmitError(null)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     },
-    onError: (err: Error) => alert(err.message),
+    onError: (err: Error) => setSubmitError(err.message),
   })
 
   function validate(): boolean {
@@ -263,6 +283,7 @@ function CreateProposalForm({ onCreated }: { onCreated: () => void }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setSubmitError(null)
     if (!validate()) return
     if (!connected) {
       try { await connect() } catch { return }
@@ -281,10 +302,19 @@ function CreateProposalForm({ onCreated }: { onCreated: () => void }) {
           Proposal submitted successfully!
         </div>
       )}
+      {submitError && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400"
+        >
+          {submitError}
+        </div>
+      )}
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <Field
           id="prop-title"
           label="Title"
+          required
           error={errors.title}
         >
           <input
@@ -301,7 +331,7 @@ function CreateProposalForm({ onCreated }: { onCreated: () => void }) {
           />
         </Field>
 
-        <Field id="prop-desc" label="Description" error={errors.description}>
+        <Field id="prop-desc" label="Description" required error={errors.description}>
           <textarea
             id="prop-desc"
             value={form.description}
@@ -316,7 +346,7 @@ function CreateProposalForm({ onCreated }: { onCreated: () => void }) {
           />
         </Field>
 
-        <Field id="prop-action" label="Proposed action" error={errors.action}>
+        <Field id="prop-action" label="Proposed action" required error={errors.action}>
           <input
             id="prop-action"
             type="text"
@@ -331,7 +361,7 @@ function CreateProposalForm({ onCreated }: { onCreated: () => void }) {
           />
         </Field>
 
-        <Field id="prop-days" label="Voting deadline (days)" error={errors.days}>
+        <Field id="prop-days" label="Voting deadline (days)" required error={errors.days}>
           <input
             id="prop-days"
             type="number"
@@ -364,22 +394,40 @@ function Field({
   id,
   label,
   error,
+  required,
   children,
 }: {
   id: string
   label: string
   error?: string
+  required?: boolean
   children: React.ReactNode
 }) {
   return (
     <div>
       <label htmlFor={id} className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
         {label}
+        {required && (
+          <span className="ml-1 text-red-500" aria-hidden="true">*</span>
+        )}
       </label>
-      <style>{`.input-base{width:100%;border-radius:.5rem;border:1px solid;padding:.375rem .75rem;font-size:.875rem;outline:none;border-color:${error ? '#fca5a5' : '#d1d5db'};background:white;color:#111827}.input-base:focus{box-shadow:0 0 0 2px #facc15}`}</style>
-      {children}
+      <div className={`w-full [&>input]:w-full [&>textarea]:w-full [&>input]:rounded-lg [&>textarea]:rounded-lg [&>input]:border [&>textarea]:border [&>input]:px-3 [&>textarea]:px-3 [&>input]:py-1.5 [&>textarea]:py-1.5 [&>input]:text-sm [&>textarea]:text-sm [&>input]:outline-none [&>textarea]:outline-none [&>input]:bg-white [&>textarea]:bg-white dark:[&>input]:bg-gray-800 dark:[&>textarea]:bg-gray-800 [&>input]:text-gray-900 [&>textarea]:text-gray-900 dark:[&>input]:text-gray-100 dark:[&>textarea]:text-gray-100 [&>input]:transition-colors [&>textarea]:transition-colors [&>input:focus]:ring-2 [&>textarea:focus]:ring-2 [&>input:focus]:ring-yellow-400 [&>textarea:focus]:ring-yellow-400 ${error ? '[&>input]:border-red-400 [&>textarea]:border-red-400 dark:[&>input]:border-red-500 dark:[&>textarea]:border-red-500' : '[&>input]:border-gray-300 [&>textarea]:border-gray-300 dark:[&>input]:border-gray-700 dark:[&>textarea]:border-gray-700'}`}>
+        {children}
+      </div>
       {error && (
-        <p id={`${id}-err`} role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
+        <p
+          id={`${id}-err`}
+          role="alert"
+          aria-live="polite"
+          className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"
+        >
+          <svg className="h-3 w-3 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
+          </svg>
           {error}
         </p>
       )}
@@ -393,6 +441,7 @@ export default function GovernancePage() {
   const { connected } = useWallet()
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [voteError, setVoteError] = useState<string | null>(null)
 
   const { data: proposals = [], isLoading, error } = useQuery({
     queryKey: ['proposals'],
@@ -403,8 +452,9 @@ export default function GovernancePage() {
     mutationFn: ({ id, choice }: { id: string; choice: VoteChoice }) => castVote(id, choice),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['proposals'] })
+      setVoteError(null)
     },
-    onError: (err: Error) => alert(err.message),
+    onError: (err: Error) => setVoteError(err.message),
   })
 
   function handleVote(id: string, choice: VoteChoice) {
@@ -454,12 +504,18 @@ export default function GovernancePage() {
         </p>
       )}
 
-      {isLoading ? (
-        <div className="space-y-4">
-          {[1, 2].map((i) => (
-            <div key={i} className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
-          ))}
+      {voteError && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400"
+        >
+          {voteError}
         </div>
+      )}
+
+      {isLoading ? (
+        <ProposalListSkeleton count={2} />
       ) : active.length > 0 ? (
         <section aria-labelledby="active-heading" className="mb-8">
           <h2 id="active-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">

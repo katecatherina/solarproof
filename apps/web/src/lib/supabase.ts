@@ -1,4 +1,26 @@
-import { createClient } from '@supabase/supabase-js'
+/**
+ * Centralized Supabase client initialization.
+ *
+ * Two clients are exported from this single module:
+ *
+ * - `supabase`            — browser/anon client, safe to use in client
+ *                           components. Uses the public anon key and
+ *                           respects Row-Level Security policies.
+ *
+ * - `createServiceClient` — server-only factory that creates a service-role
+ *                           client. Bypasses RLS. Call this only from API
+ *                           routes or Server Components — never import it
+ *                           in client-side code.
+ *
+ * Both clients are typed with the generated `Database` interface so all
+ * table/column access is fully type-checked at compile time.
+ *
+ * Environment variables required:
+ *   NEXT_PUBLIC_SUPABASE_URL        — Supabase project URL (public)
+ *   NEXT_PUBLIC_SUPABASE_ANON_KEY   — Supabase anon/public key
+ *   SUPABASE_SERVICE_ROLE_KEY       — Supabase service-role secret (server only)
+ */
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 import { env } from '@/env'
 

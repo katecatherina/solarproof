@@ -3,9 +3,18 @@ import * as SorobanRpc from '@stellar/stellar-sdk/rpc'
 import { kwhToStroops, amountToScVal, addressToScVal, bytesToScVal } from '@solarproof/stellar'
 import { env } from '@/env'
 import { createHash } from 'crypto'
+import { logger } from '@/lib/logger'
+import { AppError, ErrorCategory } from '@/lib/errors'
 
 const NETWORK_PASSPHRASE = Networks.TESTNET
-const RPC_TIMEOUT_MS = 10_000
+const RPC_TIMEOUT_MS = parseInt(process.env.STELLAR_RPC_TIMEOUT_MS ?? '10000', 10)
+
+// ---------------------------------------------------------------------------
+// Retry / backoff config (configurable via env)
+// ---------------------------------------------------------------------------
+const RETRY_MAX     = parseInt(process.env.STELLAR_RETRY_MAX     ?? '3',    10)
+const RETRY_BASE_MS = parseInt(process.env.STELLAR_RETRY_BASE_MS ?? '500',  10)
+const RETRY_MAX_MS  = parseInt(process.env.STELLAR_RETRY_MAX_MS  ?? '8000', 10)
 
 // ---------------------------------------------------------------------------
 // Circuit breaker — opens after 5 consecutive timeouts, resets after 60 s
@@ -35,9 +44,14 @@ export class CircuitOpenError extends Error {
   }
 }
 
-function checkCircuit() {
+function checkCircuit(correlationId: string) {
   if (CB.openUntil && Date.now() < CB.openUntil) {
-    throw new CircuitOpenError(Math.ceil((CB.openUntil - Date.now()) / 1000))
+    const retryAfter = Math.ceil((CB.openUntil - Date.now()) / 1000)
+    throw new AppError(
+      ErrorCategory.STELLAR_CIRCUIT,
+      `Stellar RPC circuit open — retry after ${retryAfter}s`,
+      { correlationId, retryAfter }
+    )
   }
   if (CB.openUntil && Date.now() >= CB.openUntil) {
     CB.failures = 0
@@ -52,21 +66,21 @@ function recordSuccess() {
 
 function recordFailure(correlationId: string) {
   CB.failures++
-  console.error(`[stellar] timeout correlationId=${correlationId} failures=${CB.failures}`)
+  logger.warn('stellar.rpc.timeout', { correlationId, failures: CB.failures })
   if (CB.failures >= CB.THRESHOLD) {
     CB.openUntil = Date.now() + CB.RESET_MS
-    console.error(`[stellar] circuit opened until ${new Date(CB.openUntil).toISOString()}`)
+    logger.error('stellar.circuit.opened', { openUntil: new Date(CB.openUntil).toISOString() })
   }
 }
 
-/**
- * Wrap a promise with a timeout.
- *
- * @param promise - The promise to race against the timeout.
- * @param correlationId - Identifier used in the thrown error for tracing.
- * @returns Resolves with the promise value if it settles before the timeout.
- * @throws {StellarTimeoutError} If the promise does not settle within `RPC_TIMEOUT_MS`.
- */
+/** Returns true for transient errors that should be retried. */
+function isTransient(err: unknown): boolean {
+  return (
+    err instanceof StellarTimeoutError ||
+    (err instanceof Error && /timeout|ECONNRESET|ENOTFOUND|503|429/i.test(err.message))
+  )
+}
+
 async function withTimeout<T>(promise: Promise<T>, correlationId: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>
   const timeout = new Promise<never>((_, reject) => {
@@ -83,25 +97,48 @@ async function withTimeout<T>(promise: Promise<T>, correlationId: string): Promi
 }
 
 /**
- * Execute an RPC call with timeout and circuit-breaker protection.
+ * Execute an RPC call with timeout, exponential backoff retry, and
+ * circuit-breaker protection.
+ *
+ * Transient errors (timeout, network reset, 503/429) are retried up to
+ * RETRY_MAX times with exponential backoff capped at RETRY_MAX_MS.
+ * Permanent failures are surfaced immediately without retrying.
  *
  * @param fn - Factory that returns the RPC promise to execute.
  * @param correlationId - Identifier propagated to timeout errors and logs.
  * @returns The resolved value of `fn()`.
- * @throws {CircuitOpenError} When the circuit breaker is open.
- * @throws {StellarTimeoutError} When the call exceeds `RPC_TIMEOUT_MS`.
+ * @throws {AppError} STELLAR_CIRCUIT when the circuit breaker is open.
+ * @throws {AppError} STELLAR_TIMEOUT / STELLAR_RPC on unrecoverable failure.
  */
 async function rpcCall<T>(fn: () => Promise<T>, correlationId: string): Promise<T> {
-  checkCircuit()
-  try {
-    const result = await withTimeout(fn(), correlationId)
-    recordSuccess()
-    return result
-  } catch (err) {
-    if (err instanceof StellarTimeoutError) {
-      recordFailure(correlationId)
+  checkCircuit(correlationId)
+
+  let attempt = 0
+  while (true) {
+    try {
+      const result = await withTimeout(fn(), correlationId)
+      recordSuccess()
+      return result
+    } catch (err) {
+      if (err instanceof StellarTimeoutError) {
+        recordFailure(correlationId)
+      }
+
+      const canRetry = isTransient(err) && attempt < RETRY_MAX
+      if (!canRetry) {
+        // Wrap in AppError with appropriate category
+        if (err instanceof AppError) throw err
+        if (err instanceof StellarTimeoutError) {
+          throw new AppError(ErrorCategory.STELLAR_TIMEOUT, err.message, { correlationId })
+        }
+        throw new AppError(ErrorCategory.STELLAR_RPC, err instanceof Error ? err.message : String(err), { correlationId })
+      }
+
+      const delay = Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_MAX_MS)
+      logger.warn('stellar.rpc.retry', { correlationId, attempt: attempt + 1, delayMs: delay })
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      attempt++
     }
-    throw err
   }
 }
 
