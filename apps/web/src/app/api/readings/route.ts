@@ -1,46 +1,209 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verify } from '@noble/ed25519'
+import { verifyAsync } from '@noble/ed25519'
 import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase'
-import { anchorReading, mintCertificates } from '@/lib/stellar'
 import { computeReadingHash } from '@/lib/crypto'
 import { kwhToStroops } from '@solarproof/stellar'
+import { checkRateLimit } from '@/lib/cache'
+import { checkRateLimit as checkIpRateLimit, getClientIp } from '@/lib/rate-limit'
+import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/idempotency'
+import { logger } from '@/lib/logger'
+import { requireAuth, isAuthError } from '@/lib/auth'
+import { enqueue } from '@/lib/queue'
+import { AppError, ErrorCategory, errorBody } from '@/lib/errors'
+
+const NONCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+// IP rate limit: 10 POSTs per 60 s per IP
+const IP_RATE_LIMIT = 10
+const IP_RATE_WINDOW_MS = 60_000
+const QuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().optional(),
+})
+
+/**
+ * GET /api/v1/readings
+ *
+ * Cursor-based pagination via `cursor` (ISO timestamp) and `limit` (max 100).
+ * Returns `{ data, next_cursor, total }`.
+ * Requires operator JWT.
+ */
+export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (isAuthError(auth)) return auth
+
+  const { searchParams } = req.nextUrl
+  const queryParams = Object.fromEntries(searchParams.entries())
+  const parsedQuery = QuerySchema.safeParse(queryParams)
+
+  if (!parsedQuery.success) {
+    return NextResponse.json({ error: parsedQuery.error.flatten() }, { status: 400 })
+  }
+
+  const { limit, cursor } = parsedQuery.data
+  const db = createServiceClient()
+
+  // Total count (for UI pagination)
+  const { count } = await db
+    .from('readings')
+    .select('id', { count: 'exact', head: true })
+
+  let query = db
+    .from('readings')
+    .select('id, meter_id, kwh, timestamp, reading_hash, anchored, minted, anchor_tx_hash, mint_tx_hash')
+    .order('timestamp', { ascending: false })
+    .limit(limit + 1) // fetch one extra to determine if there's a next page
+
+  if (cursor) {
+    query = query.lt('timestamp', cursor)
+  }
+
+  const { data, error } = await query
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const rows = data ?? []
+  const hasMore = rows.length > limit
+  const page = hasMore ? rows.slice(0, limit) : rows
+  const next_cursor = hasMore ? (page.length > 0 ? page[page.length - 1].timestamp : null) : null
+
+  return NextResponse.json({ data: page, next_cursor, total: count ?? 0 })
+}
+
+const MetadataSchema = z.object({
+  firmware_version: z.string().optional(),
+  hardware_model: z.string().optional(),
+  location_lat: z.number().optional(),
+  location_lon: z.number().optional(),
+  manufacturer: z.string().optional(),
+})
 
 const ReadingSchema = z.object({
-  meter_id: z.string().uuid(),
-  kwh: z.number().positive(),
-  timestamp: z.number().int().positive(), // Unix seconds
-  signature_hex: z.string().length(128),  // 64-byte Ed25519 sig as hex
+  meter_id: z.string().uuid({ message: 'meter_id must be a valid UUID' }),
+  kwh: z
+    .number({ invalid_type_error: 'kwh must be a number' })
+    .positive({ message: 'kwh must be positive' })
+    .max(1_000_000, { message: 'kwh value is unrealistically large' }),
+  timestamp: z
+    .number({ invalid_type_error: 'timestamp must be a number' })
+    .int({ message: 'timestamp must be an integer' })
+    .positive({ message: 'timestamp must be a positive Unix epoch (seconds)' })
+    .max(9_999_999_999, { message: 'timestamp must be Unix epoch in seconds, not milliseconds' }),
+  signature_hex: z
+    .string()
+    .trim()
+    .length(128, { message: 'signature_hex must be exactly 128 hex characters (64-byte Ed25519 signature)' })
+    .regex(/^[0-9a-fA-F]{128}$/, { message: 'signature_hex must contain only hexadecimal characters' }),
+  nonce: z.string().trim().min(1).max(128),
 })
 
 /**
  * POST /api/readings
  *
- * Accepts a signed meter reading, verifies the Ed25519 signature,
- * anchors the reading hash on-chain, then mints certificates.
+ * Verifies the Ed25519 signature, persists the reading, anchors on Stellar,
+ * and mints a certificate.
  *
- * Body: { meter_id, kwh, timestamp, signature_hex }
+ * Supports idempotency via the `Idempotency-Key` header (UUID recommended).
+ * Duplicate requests with the same key return the cached response without
+ * re-processing. Keys expire after IDEMPOTENCY_TTL_SECONDS (default 24 h).
+ *
+ * Returns 202 Accepted with { reading_id, job_id }.
  */
 export async function POST(req: NextRequest) {
+  const correlationId = req.headers.get('x-correlation-id') ?? undefined
+  const log = correlationId ? logger.withCorrelationId(correlationId) : logger
+
+  // IP-based rate limit: 10 requests / 60 s per IP (abuse protection)
+  const ip = getClientIp(req)
+  const ipRl = checkIpRateLimit(`ip:readings:${ip}`, IP_RATE_LIMIT, IP_RATE_WINDOW_MS)
+  if (!ipRl.allowed) {
+    const retryAfter = Math.ceil((ipRl.resetAt - Date.now()) / 1000)
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.', retryAfter },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(retryAfter),
+          'X-RateLimit-Limit': String(IP_RATE_LIMIT),
+          'X-RateLimit-Remaining': String(ipRl.remaining),
+          'X-RateLimit-Reset': String(Math.ceil(ipRl.resetAt / 1000)),
+        },
+      }
+    )
+  }
+
+  // Idempotency-Key header check
+  const idempotencyKey = req.headers.get('idempotency-key')
+  if (idempotencyKey) {
+    const cached = await getIdempotentResponse(idempotencyKey)
+    if (cached) {
+      log.info('readings.post.idempotent_hit', { idempotencyKey })
+      return NextResponse.json(cached.body, { status: cached.status })
+    }
+  }
+
   const body = await req.json().catch(() => null)
   const parsed = ReadingSchema.safeParse(body)
   if (!parsed.success) {
+    log.warn('readings.post.invalid_body', { errors: parsed.error.flatten() })
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const { meter_id, kwh, timestamp, signature_hex } = parsed.data
+  const { meter_id, kwh, timestamp, signature_hex, nonce } = parsed.data
+
   const db = createServiceClient()
+
+  // Timestamp check: reject if >5 minutes old
+  const ageMs = Date.now() - (timestamp * 1000)
+  if (ageMs > 5 * 60 * 1000 || ageMs < -60 * 1000) {
+    log.warn('readings.post.stale_timestamp', { meter_id, timestamp })
+    return NextResponse.json({ error: 'Reading timestamp is too old or in the future' }, { status: 400 })
+  }
+
+  // Idempotency check: return cached response if nonce was seen within 24 h
+  const { data: existingNonce } = await db
+    .from('idempotency_keys')
+    .select('response, created_at')
+    .eq('nonce', nonce)
+    .maybeSingle()
+
+  if (existingNonce) {
+    const age = Date.now() - new Date(existingNonce.created_at).getTime()
+    if (age < NONCE_TTL_MS) {
+      return NextResponse.json(existingNonce.response, { status: 200 })
+    }
+    // Expired — delete and allow re-processing
+    await db.from('idempotency_keys').delete().eq('nonce', nonce)
+  }
 
   // Fetch meter + cooperative
   const { data: meter } = await db
     .from('meters')
-    .select('id, pubkey_hex, cooperative_id, cooperatives(admin_address)')
+    .select('id, pubkey_hex, cooperative_id, api_key')
     .eq('id', meter_id)
     .eq('active', true)
     .single()
 
   if (!meter) {
-    return NextResponse.json({ error: 'Meter not found or inactive' }, { status: 404 })
+    log.warn('readings.post.meter_not_found_or_revoked', { meter_id })
+    return NextResponse.json({ error: 'Meter not found, inactive, or revoked' }, { status: 404 })
+  }
+
+  // Validate API key before Ed25519 signature check
+  const apiKey = req.headers.get('x-api-key')
+  if (!apiKey || apiKey !== meter.api_key) {
+    log.warn('readings.post.invalid_api_key', { meter_id })
+    return NextResponse.json({ error: 'Invalid or missing API key' }, { status: 401 })
+  }
+
+  // Rate limit: 60 requests/minute per meter public key
+  const rl = await checkRateLimit(meter.pubkey_hex)
+  if (!rl.allowed) {
+    log.warn('readings.post.rate_limited', { meter_id })
+    return NextResponse.json(
+      { error: 'Rate limit exceeded' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
   }
 
   // Compute canonical reading hash
@@ -48,17 +211,18 @@ export async function POST(req: NextRequest) {
   const readingHash = computeReadingHash(meter_id, kwhStroops, BigInt(timestamp))
 
   // Verify Ed25519 signature
-  const sigValid = await verify(
+  const sigValid = await verifyAsync(
     Buffer.from(signature_hex, 'hex'),
     readingHash,
     Buffer.from(meter.pubkey_hex, 'hex')
   ).catch(() => false)
 
   if (!sigValid) {
+    log.warn('readings.post.invalid_signature', { meter_id })
     return NextResponse.json({ error: 'Invalid meter signature' }, { status: 401 })
   }
 
-  // Persist reading
+  // Persist reading; Stellar anchor + mint will be processed asynchronously.
   const { data: reading, error: readingErr } = await db
     .from('readings')
     .insert({
@@ -69,53 +233,57 @@ export async function POST(req: NextRequest) {
       signature_hex,
       anchored: false,
       minted: false,
+      metadata: metadata ?? null,
+      metadata_hash: metadataHash ? metadataHash.toString('hex') : null,
+      metadata_signature_hex: metadata_signature_hex ?? null,
     })
     .select()
     .single()
 
   if (readingErr || !reading) {
-    return NextResponse.json({ error: 'Failed to save reading' }, { status: 500 })
+    if (isAlreadyAnchoredError(readingErr)) {
+      const { data: existing } = await db
+        .from('readings')
+        .select('id')
+        .eq('reading_hash', readingHash.toString('hex'))
+        .single()
+
+      return NextResponse.json(
+        { error: 'Reading already anchored', reading_id: existing?.id, code: ErrorCategory.DB_CONSTRAINT, retriable: false },
+        { status: 409 }
+      )
+    }
+    const appErr = new AppError(ErrorCategory.DB_QUERY, 'Failed to save reading', { meter_id, dbError: readingErr?.message })
+    log.error('readings.post.db_insert_failed', { ...appErr.meta })
+    return NextResponse.json(errorBody(appErr), { status: appErr.httpStatus })
   }
 
-  // Anchor on-chain
-  let anchorTxHash: string
-  try {
-    anchorTxHash = await anchorReading({
-      readingHash,
-      meterPubkeyHex: meter.pubkey_hex,
-      signatureHex: signature_hex,
-      kwhStroops,
-      meterId: meter_id,
-      timestampUnix: BigInt(timestamp),
-    })
-    await db.from('readings').update({ anchored: true, anchor_tx_hash: anchorTxHash }).eq('id', reading.id)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Anchor failed'
-    return NextResponse.json({ error: message, reading_id: reading.id }, { status: 500 })
+  const { data: coop } = await db
+    .from('cooperatives')
+    .select('admin_address')
+    .eq('id', meter.cooperative_id)
+    .single()
+
+  const recipient = coop?.admin_address
+  if (!recipient) {
+    log.error('readings.post.missing_recipient', { reading_id: reading.id, cooperative_id: meter.cooperative_id })
+    return NextResponse.json({ error: 'No cooperative admin address' }, { status: 500 })
   }
 
-  // Mint certificates
-  try {
-    const cooperative = meter.cooperatives as { admin_address: string } | null
-    const recipient = cooperative?.admin_address
-    if (!recipient) throw new Error('No cooperative admin address')
+  const jobId = await enqueue('anchor_and_mint', {
+    readingId: reading.id,
+    readingHashHex: readingHash.toString('hex'),
+    recipientAddress: recipient,
+    kwh,
+    correlationId,
+  })
 
-    const mintTxHash = await mintCertificates(recipient, kwh)
-    await db.from('readings').update({ minted: true, mint_tx_hash: mintTxHash }).eq('id', reading.id)
-    await db.from('certificates').insert({
-      cooperative_id: meter.cooperative_id,
-      reading_id: reading.id,
-      reading_hash: readingHash.toString('hex'),
-      anchor_tx_hash: anchorTxHash,
-      mint_tx_hash: mintTxHash,
-      kwh,
-      issued_at: new Date().toISOString(),
-      retired: false,
-    })
+  log.info('readings.post.enqueued', { reading_id: reading.id, job_id: jobId })
 
-    return NextResponse.json({ reading_id: reading.id, anchor_tx_hash: anchorTxHash, mint_tx_hash: mintTxHash }, { status: 201 })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Mint failed'
-    return NextResponse.json({ error: message, reading_id: reading.id, anchor_tx_hash: anchorTxHash }, { status: 500 })
+  const responseBody = { reading_id: reading.id, job_id: jobId }
+  if (idempotencyKey) {
+    await storeIdempotentResponse(idempotencyKey, { body: responseBody, status: 202 })
   }
+
+  return NextResponse.json(responseBody, { status: 202 })
 }

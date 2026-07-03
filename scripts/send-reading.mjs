@@ -2,14 +2,17 @@
 /**
  * scripts/send-reading.mjs
  *
- * Simulate a smart meter sending a signed reading to the SolarProof API.
+ * Simulate a smart meter sending a signed reading (+ optional metadata) to the SolarProof API.
  *
  * Usage:
  *   node scripts/send-reading.mjs \
  *     --meter-id <uuid> \
  *     --kwh 12.5 \
  *     --key ./meter-key.json \
- *     --api http://localhost:3000
+ *     --api http://localhost:3000 \
+ *     [--firmware 1.2.3] \
+ *     [--model "SolarEdge-SE7600H"] \
+ *     [--manufacturer "SolarEdge"]
  */
 
 import { createSign, createHash } from 'crypto'
@@ -22,6 +25,9 @@ const meterId = get('--meter-id') ?? 'test-meter-id'
 const kwh = parseFloat(get('--kwh') ?? '10')
 const keyFile = get('--key') ?? './meter-key.json'
 const api = get('--api') ?? 'http://localhost:3000'
+const firmware = get('--firmware')
+const model = get('--model')
+const manufacturer = get('--manufacturer')
 
 const { private_key_hex } = JSON.parse(readFileSync(keyFile, 'utf8'))
 const timestamp = Math.floor(Date.now() / 1000)
@@ -38,15 +44,36 @@ const privKeyDer = Buffer.concat([
   Buffer.from('302e020100300506032b657004220420', 'hex'),
   Buffer.from(private_key_hex, 'hex'),
 ])
-const sign = createSign('ed25519')
-sign.update(readingHash)
-const signature = sign.sign({ key: privKeyDer, format: 'der', type: 'pkcs8' })
+
+function signHash(hash) {
+  const sign = createSign('ed25519')
+  sign.update(hash)
+  return sign.sign({ key: privKeyDer, format: 'der', type: 'pkcs8' })
+}
+
+const signature = signHash(readingHash)
 
 const body = {
   meter_id: meterId,
   kwh,
   timestamp,
   signature_hex: signature.toString('hex'),
+  nonce: `sim-${meterId}-${timestamp}-${Math.floor(Math.random() * 1000000)}`,
+}
+
+// Attach optional signed metadata
+const metadata = {}
+if (firmware) metadata.firmware_version = firmware
+if (model) metadata.hardware_model = model
+if (manufacturer) metadata.manufacturer = manufacturer
+
+if (Object.keys(metadata).length > 0) {
+  const canonical = JSON.stringify(metadata, Object.keys(metadata).sort())
+  const metadataHash = createHash('sha256').update(Buffer.from(canonical, 'utf8')).digest()
+  const metadataSig = signHash(metadataHash)
+  body.metadata = metadata
+  body.metadata_signature_hex = metadataSig.toString('hex')
+  console.log('Metadata hash:', metadataHash.toString('hex'))
 }
 
 console.log('Sending reading:', { meterId, kwh, timestamp })

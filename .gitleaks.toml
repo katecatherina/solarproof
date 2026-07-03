@@ -1,0 +1,24 @@
+[allowlist]
+  description = "Allowlist for known safe placeholder values"
+  paths = [
+    "apps/web/.env.example",
+    "apps/web/.env.staging.example",
+    ".env.staging.example",
+    "README.md",
+    "docs/",
+  ]
+  regexes = [
+    # Generic placeholders
+    '''(?i)placeholder''',
+    # Stellar testnet public keys (start with SAAAA or GAAA — well-known test keys)
+    '''SAAAA[A-Z2-7]{55}''',
+    # Quoted example values
+    '''(your[-_]?|example[-_]?|dummy[-_]?|fake[-_]?|test[-_]?)(key|secret|token|password)''',
+  ]
+
+# Reduce false positives for Stellar-style keys in test/example files
+[[rules]]
+  id = "stellar-test-key-allowlist"
+  description = "Ignore Stellar testnet seed keys used as examples"
+  regex = '''S[A-Z2-7]{55}'''
+  allowlist.regexes = ['''SAAAA[A-Z2-7]{51}''']

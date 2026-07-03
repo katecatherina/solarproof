@@ -1,10 +1,17 @@
+// #481 unsupported-browser landing page.
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { headers } from 'next/headers'
 import './globals.css'
 import { Providers } from './providers'
 import { Navbar } from '@/components/navbar'
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/middleware'
+import { ErrorBoundary } from '@/components/error-boundary'
+import { NavigationProgress } from '@/components/navigation-progress'
+import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
+import { NextIntlClientProvider } from 'next-intl'
+import { getMessages, getLocale } from 'next-intl/server'
+import type { Locale } from '@/lib/locales'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -21,19 +28,23 @@ export const metadata: Metadata = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const headerList = await headers()
-  const rawLocale = headerList.get('x-locale') ?? DEFAULT_LOCALE
-  const locale: Locale = SUPPORTED_LOCALES.includes(rawLocale as Locale)
-    ? (rawLocale as Locale)
-    : DEFAULT_LOCALE
+  const locale = await getLocale()
+  const messages = await getMessages()
 
   return (
     <html lang={locale} suppressHydrationWarning>
       <body className={inter.className}>
-        <Providers>
-          <Navbar />
-          <main className="min-h-screen bg-gray-50">{children}</main>
-        </Providers>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <Providers>
+            <NavigationProgress />
+            <Navbar locale={locale as Locale} />
+            <main className="min-h-screen bg-gray-50 dark:bg-gray-950">
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </main>
+          </Providers>
+        </NextIntlClientProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
