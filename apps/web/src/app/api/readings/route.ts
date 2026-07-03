@@ -70,6 +70,14 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ data: page, next_cursor, total: count ?? 0 })
 }
 
+const MetadataSchema = z.object({
+  firmware_version: z.string().optional(),
+  hardware_model: z.string().optional(),
+  location_lat: z.number().optional(),
+  location_lon: z.number().optional(),
+  manufacturer: z.string().optional(),
+})
+
 const ReadingSchema = z.object({
   meter_id: z.string().uuid({ message: 'meter_id must be a valid UUID' }),
   kwh: z
@@ -225,6 +233,9 @@ export async function POST(req: NextRequest) {
       signature_hex,
       anchored: false,
       minted: false,
+      metadata: metadata ?? null,
+      metadata_hash: metadataHash ? metadataHash.toString('hex') : null,
+      metadata_signature_hex: metadata_signature_hex ?? null,
     })
     .select()
     .single()
