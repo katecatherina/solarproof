@@ -19,7 +19,7 @@
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "conventional-changelog-conventionalcommits": "^8.0.0",
-    "prettier": "^3.9.4",
+    "prettier": "^3.9.9",
     "semantic-release": "^24.0.0",
     "turbo": "^2.10.2",
     "typescript": "^5.6.3"
