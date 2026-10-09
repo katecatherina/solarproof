@@ -399,9 +399,8 @@ export default function DashboardPage() {
                       contentStyle={{ backgroundColor: colors.tooltip.bg, border: `1px solid ${colors.tooltip.border}`, borderRadius: '8px', fontSize: '12px' }}
                     />
                     <Legend
-                      content={(props) => (
+                      content={() => (
                         <AccessibleLegend
-                          {...props}
                           items={[
                             { value: 'Issued', description: 'Issued: certificates minted in each period, shown as a green line' },
                             { value: 'Retired', description: 'Retired: certificates burned in each period, shown as a red line' },

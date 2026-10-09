@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { checkDatabase, checkStellarRpc } from '@/app/api/health/route'
+import { checkDatabase, checkStellarRpc } from '@/lib/health-checks'
 
 export async function GET() {
   const [db, stellar] = await Promise.all([checkDatabase(), checkStellarRpc()])

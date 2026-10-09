@@ -28,8 +28,18 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  type AuditLogRow = {
+    id: string
+    operator_id: string | null
+    action: string
+    resource_id: string | null
+    ip_address: string | null
+    metadata: Record<string, unknown> | null
+    created_at: string
+  }
+
   const header = 'id,operator_id,action,resource_id,ip_address,metadata,created_at\n'
-  const rows = (data ?? []).map(r =>
+  const rows = (data as AuditLogRow[] ?? []).map(r =>
     [r.id, r.operator_id, r.action, r.resource_id ?? '', r.ip_address ?? '',
      JSON.stringify(r.metadata ?? {}), r.created_at]
       .map(v => `"${String(v).replace(/"/g, '""')}"`)

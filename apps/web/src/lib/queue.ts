@@ -31,7 +31,7 @@ let _queue: Queue | null = null
 function getQueue(): Queue {
   if (!_queue) {
     _queue = new Queue(QUEUE_NAME, {
-      connection: getRedisConnection(),
+      connection: getRedisConnection() as never,
       defaultJobOptions: {
         attempts: 3,
         backoff: BACKOFF,
@@ -87,7 +87,7 @@ export async function enqueue(
  */
 export function startWorker(): Worker {
   const worker = new Worker(QUEUE_NAME, processJob, {
-    connection: getRedisConnection(),
+    connection: getRedisConnection() as never,
     concurrency: 2,
   })
 

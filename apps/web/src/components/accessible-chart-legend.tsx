@@ -10,7 +10,7 @@ export function AccessibleLegend({
   payload,
   items,
   className = 'flex justify-center gap-4 pt-2.5 text-[11px] text-gray-600 dark:text-gray-400',
-}: LegendProps & { items: LegendItem[]; className?: string }) {
+}: Omit<LegendProps, 'width'> & { width?: number; items: LegendItem[]; className?: string }) {
   if (!payload?.length) return null
 
   const descriptions = new Map(items.map((item) => [item.value, item.description]))

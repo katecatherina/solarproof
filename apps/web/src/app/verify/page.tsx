@@ -109,7 +109,7 @@ export default function VerifyPage() {
   const [copied, setCopied] = useState(false)
   const { pushToast } = useToast()
 
-  function handleVerify(e: React.FormEvent) {
+  async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
     const q = query.trim()
     if (!q) return
@@ -122,7 +122,7 @@ export default function VerifyPage() {
       const data = await res.json()
       if (!res.ok) {
         const message = data.error || 'Unable to verify certificate'
-        setError(message)
+        setPageError(new Error(message))
         pushToast({ variant: 'error', title: 'Verification failed', description: message })
         return
       }
@@ -130,10 +130,8 @@ export default function VerifyPage() {
       setResult(data)
       pushToast({ variant: 'success', title: 'Certificate verified', description: 'Full chain of custody confirmed.' })
     } catch {
-      setError('Network error — please try again.')
-      trackEvent('verify_error', { status: 0 })
+      setPageError(new Error('Network error — please try again.'))
     } finally {
-      endTiming()
       setLoading(false)
     }
   }
@@ -202,10 +200,10 @@ export default function VerifyPage() {
         )}
       </div>
 
-      {error && (
+      {pageError && (
         <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400">
           <XCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          {error}
+          {pageError.message}
         </div>
       )}
 

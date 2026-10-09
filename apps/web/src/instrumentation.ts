@@ -27,8 +27,7 @@ export async function register() {
 
   const { NodeSDK } = await import('@opentelemetry/sdk-node')
   const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http')
-  const { Resource } = await import('@opentelemetry/resources')
-  const { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION } = await import('@opentelemetry/semantic-conventions')
+  const { resourceFromAttributes } = await import('@opentelemetry/resources')
   const { SimpleSpanProcessor } = await import('@opentelemetry/sdk-trace-node')
   const { HttpInstrumentation } = await import('@opentelemetry/instrumentation-http')
   const { FetchInstrumentation } = await import('@opentelemetry/instrumentation-fetch')
@@ -36,11 +35,11 @@ export async function register() {
   const exporter = new OTLPTraceExporter()
 
   const sdk = new NodeSDK({
-    resource: new Resource({
-      [SEMRESATTRS_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? 'solarproof-api',
-      [SEMRESATTRS_SERVICE_VERSION]: process.env.npm_package_version ?? '1.0.0',
+    resource: resourceFromAttributes({
+      'service.name': process.env.OTEL_SERVICE_NAME ?? 'solarproof-api',
+      'service.version': process.env.npm_package_version ?? '1.0.0',
     }),
-    spanProcessor: new SimpleSpanProcessor(exporter) as never,
+    spanProcessor: new SimpleSpanProcessor(exporter as never),
     instrumentations: [
       new HttpInstrumentation(),
       new FetchInstrumentation(),
@@ -62,9 +61,8 @@ export async function register() {
     const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     if (otlpEndpoint) {
       const exporter = new OTLPMetricExporter({ url: otlpEndpoint })
-      const meterProvider = new MeterProvider()
       const reader = new PeriodicExportingMetricReader({ exporter, exportIntervalMillis: 10_000 })
-      meterProvider.addMetricReader(reader)
+      const meterProvider = new MeterProvider({ readers: [reader] })
       // Attach meter provider globally
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const api = await import('@opentelemetry/api')

@@ -14,6 +14,12 @@ import { AppError, ErrorCategory, errorBody } from '@/lib/errors'
 
 const NONCE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
+function isAlreadyAnchoredError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { code?: string; message?: string }
+  return e.code === '23505' || (e.message?.includes('duplicate') ?? false) || (e.message?.includes('unique') ?? false)
+}
+
 // IP rate limit: 10 POSTs per 60 s per IP
 const IP_RATE_LIMIT = 10
 const IP_RATE_WINDOW_MS = 60_000
@@ -233,9 +239,7 @@ export async function POST(req: NextRequest) {
       signature_hex,
       anchored: false,
       minted: false,
-      metadata: metadata ?? null,
-      metadata_hash: metadataHash ? metadataHash.toString('hex') : null,
-      metadata_signature_hex: metadata_signature_hex ?? null,
+
     })
     .select()
     .single()

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCorsHeaders } from '@/lib/cors'
 
+export const SUPPORTED_LOCALES = ['en', 'es', 'fr', 'de', 'pt'] as const
+export type Locale = typeof SUPPORTED_LOCALES[number]
+
 /**
  * Middleware that:
  * 1. Enforces CORS policy — restricts origins to CORS_ALLOWED_ORIGINS + localhost in dev.

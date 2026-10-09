@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { WalletGate } from '@/components/wallet-gate'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PlusCircle, ShieldOff } from 'lucide-react'
-import { CopyableText } from '@/components/copy-button'
 
 interface Meter {
   id: string
@@ -117,15 +116,14 @@ function cloneWithA11y(
   children: React.ReactNode,
   opts: { id: string; errorId?: string; describedBy?: string; hasError: boolean }
 ): React.ReactNode {
-  const React = require('react') as typeof import('react')
-  const child = React.Children.only(children) as React.ReactElement
+  const child = React.Children.only(children) as React.ReactElement<React.HTMLAttributes<HTMLElement> & { 'aria-invalid'?: boolean | 'true' | 'false' | 'grammar' | 'spelling' }>
   const baseClass: string = child.props.className ?? ''
   const errorClass = opts.hasError
     ? baseClass
         .replace('border-gray-300', 'border-red-400')
         .replace('dark:border-gray-700', 'dark:border-red-500')
     : baseClass
-  return React.cloneElement(child, {
+  return React.cloneElement(child as React.ReactElement<Record<string, unknown>>, {
     'aria-invalid': opts.hasError ? ('true' as const) : undefined,
     'aria-describedby': opts.describedBy,
     className: errorClass,
