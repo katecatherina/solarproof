@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-06-02  
-**Issue:** [#134](https://github.com/AnnabelJoe/solarproof/issues/134)
+**Issue:** [#134](https://github.com/katecatherinaa/solarproof/issues/134)
 
 ## Context
 

@@ -206,7 +206,7 @@ Anyone — including regulators and buyers — can verify a certificate without 
 | Certificate not appearing after reading | Minting delay or failed mint | Check the Stellar transaction in the dashboard; see [tracer-sim auto-diagnosis](./API.md#error-handling) |
 | Governance vote not registering | Wallet not connected or wrong network | Reconnect Freighter and ensure it is set to Testnet |
 
-For further help, open an issue at [github.com/AnnabelJoe/solarproof/issues](https://github.com/AnnabelJoe/solarproof/issues).
+For further help, open an issue at [github.com/katecatherinaa/solarproof/issues](https://github.com/katecatherinaa/solarproof/issues).
 
 ---
 

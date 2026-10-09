@@ -1,7 +1,7 @@
 # Blue-Green Deployment Runbook
 
 **Last updated:** 2026-05-29  
-**Relates to:** [Issue #301](https://github.com/AnnabelJoe/solarproof/issues/301)
+**Relates to:** [Issue #301](https://github.com/katecatherinaa/solarproof/issues/301)
 
 ## Overview
 

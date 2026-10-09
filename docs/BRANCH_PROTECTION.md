@@ -26,7 +26,7 @@ Branch protection rules for `main` and `develop` are applied automatically by th
 The workflow requires a **Personal Access Token** with `administration:write` scope:
 
 1. Create a PAT: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained
-   - Repository: `AnnabelJoe/solarproof`
+   - Repository: `katecatherinaa/solarproof`
    - Permissions: `Administration` → Read and write
 2. Add it as a repository secret: Settings → Secrets → `BRANCH_PROTECTION_TOKEN`
 3. The workflow runs automatically on the next push to `main`, or trigger it manually via

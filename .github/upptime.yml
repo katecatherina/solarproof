@@ -1,5 +1,5 @@
-owner: AnnabelJoe
-repo: solarproof-status   # separate repo for status page (create at github.com/AnnabelJoe/solarproof-status)
+owner: katecatherinaa
+repo: solarproof-status   # separate repo for status page (create at github.com/katecatherinaa/solarproof-status)
 
 sites:
   - name: API Health

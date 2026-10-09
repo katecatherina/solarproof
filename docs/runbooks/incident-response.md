@@ -121,5 +121,5 @@ Complete within 48 hours of resolution for P1/P2 incidents.
 - Stellar Expert (mainnet): https://stellar.expert/explorer/mainnet
 - Vercel dashboard: https://vercel.com/dashboard
 - Supabase dashboard: https://app.supabase.com
-- GitHub Actions: https://github.com/AnnabelJoe/solarproof/actions
+- GitHub Actions: https://github.com/katecatherinaa/solarproof/actions
 - Security policy: [SECURITY.md](../../SECURITY.md)

@@ -69,7 +69,7 @@ Public Verifier  (https://solarproof.vercel.app/verify)
 ## 1. Clone and install
 
 ```bash
-git clone https://github.com/AnnabelJoe/solarproof.git
+git clone https://github.com/katecatherinaa/solarproof.git
 cd solarproof
 pnpm install
 ```

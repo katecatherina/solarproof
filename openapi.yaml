@@ -33,7 +33,7 @@ info:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0
   contact:
-    url: https://github.com/AnnabelJoe/solarproof
+    url: https://github.com/katecatherinaa/solarproof
 
 servers:
   - url: https://solarproof.vercel.app

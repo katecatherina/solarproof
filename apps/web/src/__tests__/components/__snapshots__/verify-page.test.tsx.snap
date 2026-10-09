@@ -26,7 +26,7 @@ exports[`VerifyPage snapshots > renders error state 1`] = `
            
           <a
             class="underline hover:text-gray-700 dark:hover:text-gray-300"
-            href="https://github.com/AnnabelJoe/solarproof/blob/main/docs/verify.md"
+            href="https://github.com/katecatherinaa/solarproof/blob/main/docs/verify.md"
             rel="noopener noreferrer"
             target="_blank"
           >
@@ -122,7 +122,7 @@ exports[`VerifyPage snapshots > renders idle state 1`] = `
            
           <a
             class="underline hover:text-gray-700 dark:hover:text-gray-300"
-            href="https://github.com/AnnabelJoe/solarproof/blob/main/docs/verify.md"
+            href="https://github.com/katecatherinaa/solarproof/blob/main/docs/verify.md"
             rel="noopener noreferrer"
             target="_blank"
           >
@@ -205,7 +205,7 @@ exports[`VerifyPage snapshots > renders success result 1`] = `
            
           <a
             class="underline hover:text-gray-700 dark:hover:text-gray-300"
-            href="https://github.com/AnnabelJoe/solarproof/blob/main/docs/verify.md"
+            href="https://github.com/katecatherinaa/solarproof/blob/main/docs/verify.md"
             rel="noopener noreferrer"
             target="_blank"
           >

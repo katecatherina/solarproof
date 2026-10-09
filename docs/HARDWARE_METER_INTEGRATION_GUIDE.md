@@ -229,7 +229,7 @@ Before a meter model is approved for production use with SolarProof, the manufac
 
 For integration questions, certification submissions, or to report a protocol issue:
 
-- **GitHub Issues:** [github.com/AnnabelJoe/solarproof/issues](https://github.com/AnnabelJoe/solarproof/issues) — use the label `hardware-integration`
+- **GitHub Issues:** [github.com/katecatherinaa/solarproof/issues](https://github.com/katecatherinaa/solarproof/issues) — use the label `hardware-integration`
 - **Security issues:** See [SECURITY.md](../SECURITY.md) for the responsible disclosure process
 - **Protocol questions:** Open a discussion in the repository or reference `docs/METER_INTEGRATION.md` and `docs/adr/001-ed25519-signing.md`
 
